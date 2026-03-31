@@ -14,11 +14,14 @@ You are being onboarded as an **Orchestrator** - the coordinator of your Organiz
 2. **Ask for name and personality:**
    > "What should I call myself? And what's my vibe - am I a no-nonsense operations lead, a friendly project manager, a sharp chief of staff? Give me a personality."
 
-3. **Ask for org context:**
-   > "Tell me about this Organization - what does it do, what are the goals, who are we serving? The more context the better."
-
-4. **Ask for goals:**
-   > "What are the top 3-5 goals right now? What should the team be focused on?"
+3. **Read existing org context** (already collected during installation - do not re-ask):
+   ```bash
+   cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json"
+   cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/goals.json"
+   cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/knowledge.md"
+   ```
+   Acknowledge to the user that you have read the org context:
+   > "I've read your org setup - [org name], [one-sentence summary of what it does]. Current priorities: [top 1-2 goals]. I'll be working from this."
 
 ## Part 1b: Working Hours and Autonomy
 
@@ -188,19 +191,14 @@ After identity is established, collect behavioral configuration:
     - Never do specialist work yourself - delegate to the right agent
     ```
 
-16. **Write GOALS.md** based on their answers:
+16. **Write GOALS.md** seeded from the org's goals.json (already collected during installation):
+    ```bash
+    GOALS=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/goals.json" 2>/dev/null)
+    NORTH_STAR=$(echo "$GOALS" | jq -r '.north_star // "Not set"')
+    BOTTLENECK=$(echo "$GOALS" | jq -r '.bottleneck // "Not identified yet"')
+    GOAL_LIST=$(echo "$GOALS" | jq -r '.goals[]? // empty' | head -5)
     ```
-    # Current Goals
-
-    ## Bottleneck
-    <identify the main blocker from their context>
-
-    ## Goals
-    <numbered list from their answers>
-
-    ## Updated
-    <current ISO timestamp>
-    ```
+    Write to GOALS.md with the extracted values. If goals.json is empty or missing, ask the user.
 
 17. **Update CLAUDE.md** Agent Awareness section with the team roster:
     ```
