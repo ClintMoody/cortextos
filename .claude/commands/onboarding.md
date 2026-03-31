@@ -349,22 +349,12 @@ Wait 5-10 seconds for the daemon to initialize, then save and set up auto-start:
 
 ```bash
 pm2 save
-STARTUP_CMD=$(pm2 startup 2>&1 | grep "sudo env PATH")
-if [ -n "$STARTUP_CMD" ]; then
-  eval "$STARTUP_CMD"
-  echo "Auto-start configured."
-else
-  echo "Could not extract startup command — may already be configured or requires manual setup."
-fi
-```
-
-This captures the `sudo env PATH=...` command PM2 prints and runs it automatically. If it fails (e.g. sudo prompts for a password in a non-interactive context), fall back:
-
-```bash
 pm2 startup
 ```
 
-And run the printed command manually in the terminal.
+> "PM2 just printed a command starting with `sudo env PATH=...`. Open a new terminal window, paste that command, and run it. It sets up the daemon to survive reboots. You only need to do this once."
+
+Wait for them to confirm they've run it before continuing.
 
 ### 7c. Verify daemon is running
 
