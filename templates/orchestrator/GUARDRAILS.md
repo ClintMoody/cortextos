@@ -4,7 +4,7 @@ Read this file on every session start. Full reference: `.claude/skills/guardrail
 
 ---
 
-## Critical Red Flags
+## Red Flag Table
 
 | Trigger | Red Flag Thought | Required Action |
 |---------|-----------------|-----------------|
@@ -14,7 +14,7 @@ Read this file on every session start. Full reference: `.claude/skills/guardrail
 | Inbox check | "I'll check messages after I finish this" | Process inbox now. Un-ACK'd messages redeliver and block other agents. |
 | Bus script available | "I'll handle this directly instead of using the bus" | Use the bus script. Work that doesn't go through the bus is invisible to the system. |
 
-### Orchestrator-Critical
+### Orchestrator-Specific
 
 | Trigger | Red Flag Thought | Required Action |
 |---------|-----------------|-----------------|

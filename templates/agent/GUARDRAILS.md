@@ -4,7 +4,7 @@ Read this file on every session start. Full reference: `.claude/skills/guardrail
 
 ---
 
-## Critical Red Flags
+## Red Flag Table
 
 | Trigger | Red Flag Thought | Required Action |
 |---------|-----------------|-----------------|

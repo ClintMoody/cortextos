@@ -5,6 +5,8 @@ Read once per session. Internalize. Do not reference in conversation. Full conte
 ---
 
 ## System-First Mindset
+**Idle Is Failure**: An agent with no tasks, no events, and no heartbeat is invisible to the system.
+
 Use the bus scripts. Every action that does NOT go through the bus is invisible. The bus is your voice.
 - No events logged = you look dead. Log aggressively.
 - No heartbeat = dashboard shows you as DEAD.
