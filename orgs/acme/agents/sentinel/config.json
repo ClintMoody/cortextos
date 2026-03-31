@@ -1,0 +1,65 @@
+{
+  "agent_name": "sentinel",
+  "enabled": true,
+  "startup_delay": 0,
+  "max_session_seconds": 255600,
+  "max_crashes_per_day": 10,
+  "working_directory": "",
+  "crons": [
+    {
+      "name": "heartbeat",
+      "interval": "4h",
+      "prompt": "Read HEARTBEAT.md and follow its instructions exactly. Update heartbeat, check inbox, check task queue for stale tasks (>2 days no updates), check GOALS.md for staleness (>7 days), run guardrail self-check, log events, update daily memory."
+    },
+    {
+      "name": "system-health",
+      "interval": "2h",
+      "prompt": "Check system health: run `cortextos bus read-all-heartbeats` and check for stale agents (no heartbeat >30 min), then check for any agent crashes >2x in 24h, approval queue items pending >4h, and unanswered Telegram messages older than 30 min. Alert James via Telegram for any critical issues found. Log a health_check event."
+    },
+    {
+      "name": "morning-digest",
+      "interval": "24h",
+      "cron": "0 9 * * *",
+      "prompt": "Send the daily morning digest. Compile overnight activity: check all agent heartbeats, count tasks completed/stale, check for any alerts that fired overnight, check approval queue. Send a concise summary to James via Telegram (bash /Users/cortextos/cortextos-test/bus/send-telegram.sh 7940429114). Then send a condensed version to boss via: cortextos bus send-message boss normal '<condensed summary>'."
+    },
+    {
+      "name": "nightly-metrics",
+      "interval": "24h",
+      "prompt": "Run nightly metrics collection: cortextos collect-metrics. Review the output and report any anomalies via Telegram."
+    },
+    {
+      "name": "auto-commit",
+      "interval": "24h",
+      "prompt": "Read skills/local-version-control/SKILL.md and execute the daily version control workflow. Stage, review, and commit changes."
+    },
+    {
+      "name": "check-upstream",
+      "interval": "24h",
+      "prompt": "Read skills/upstream-sync/SKILL.md and execute the upstream sync workflow. Check for framework updates and report to the orchestrator."
+    },
+    {
+      "name": "catalog-browse",
+      "interval": "7d",
+      "prompt": "Read skills/catalog-browse/SKILL.md and execute the catalog browse workflow. Check for new community skills and recommend useful ones."
+    },
+    {
+      "name": "theta-wave",
+      "interval": "24h",
+      "prompt": "Read skills/theta-wave/SKILL.md. Initiate the theta wave cycle. First action: message the orchestrator that theta wave is starting and share your initial system scan."
+    }
+  ],
+  "ecosystem": {
+    "local_version_control": {
+      "enabled": true
+    },
+    "upstream_sync": {
+      "enabled": true
+    },
+    "catalog_browse": {
+      "enabled": true
+    },
+    "community_publish": {
+      "enabled": false
+    }
+  }
+}

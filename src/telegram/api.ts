@@ -15,6 +15,15 @@ export class TelegramAPI {
   }
 
   /**
+   * Strip MarkdownV2-style backslash escapes that Telegram Markdown v1 doesn't support.
+   * In v1, only *, _, `, [ are special. Everything else should not be backslash-escaped.
+   */
+  private sanitizeMarkdown(text: string): string {
+    // Remove backslash before any char that isn't a Markdown v1 special char or newline
+    return text.replace(/\\([^_*`\[\n])/g, '$1');
+  }
+
+  /**
    * Send a text message. Splits long messages at 4096 chars.
    */
   async sendMessage(
@@ -22,23 +31,25 @@ export class TelegramAPI {
     text: string,
     replyMarkup?: object,
   ): Promise<any> {
+    const sanitized = this.sanitizeMarkdown(text);
     // Rate limit: 1 message per second per chat
     await this.rateLimit(String(chatId));
 
     // Split long messages
     const maxLen = 4096;
-    if (text.length <= maxLen) {
+    if (sanitized.length <= maxLen) {
       return this.post('sendMessage', {
         chat_id: chatId,
-        text,
+        text: sanitized,
+        parse_mode: 'Markdown',
         ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       });
     }
 
     // Split into chunks
     const chunks: string[] = [];
-    for (let i = 0; i < text.length; i += maxLen) {
-      chunks.push(text.slice(i, i + maxLen));
+    for (let i = 0; i < sanitized.length; i += maxLen) {
+      chunks.push(sanitized.slice(i, i + maxLen));
     }
 
     let result: any;
@@ -46,6 +57,7 @@ export class TelegramAPI {
       result = await this.post('sendMessage', {
         chat_id: chatId,
         text: chunk,
+        parse_mode: 'Markdown',
       });
     }
     return result;

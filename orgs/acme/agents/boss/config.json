@@ -1,0 +1,40 @@
+{
+  "agent_name": "boss",
+  "enabled": true,
+  "startup_delay": 0,
+  "max_session_seconds": 255600,
+  "max_crashes_per_day": 10,
+  "working_directory": "",
+  "crons": [
+    {
+      "name": "heartbeat",
+      "interval": "4h",
+      "prompt": "Read HEARTBEAT.md and follow its instructions. Update your heartbeat, check inbox, review agent health via read-all-heartbeats.sh, and work on coordination tasks."
+    },
+    {
+      "name": "check-approvals",
+      "interval": "2h",
+      "prompt": "Check for pending approvals: ls $CTX_ROOT/orgs/$CTX_ORG/approvals/pending/ 2>/dev/null. Review any pending approval files and route to human via Telegram if needed."
+    },
+    {
+      "name": "morning-review",
+      "interval": "24h",
+      "prompt": "Read skills/morning-review/SKILL.md and execute the full morning review workflow. Include goal cascade from skills/goal-management/SKILL.md. Send morning briefing to user at 9am EST."
+    },
+    {
+      "name": "evening-review",
+      "interval": "24h",
+      "prompt": "Read skills/evening-review/SKILL.md and execute the full evening review workflow. Summarize the day, queue overnight tasks. Send evening summary to user at 9pm EST."
+    },
+    {
+      "name": "weekly-goals-review",
+      "interval": "7d",
+      "prompt": "Read skills/weekly-review/SKILL.md and execute a full weekly goals review. Check progress against all 5 goals in GOALS.md, flag blockers, propose adjustments. Send summary to user. Run on Monday mornings."
+    },
+    {
+      "name": "task-queue-sweep",
+      "interval": "24h",
+      "prompt": "Sweep the task queue for all agents. Flag any tasks with no updates in 2+ days as stale. Ping the assigned agent and notify user of blockers. Use: cortextos bus list-tasks --org $CTX_ORG"
+    }
+  ]
+}

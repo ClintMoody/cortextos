@@ -1,0 +1,33 @@
+{
+  "monitoring": {
+    "alert_thresholds": {
+      "agent_crash_per_24h": 2,
+      "agent_stale_minutes": 30,
+      "task_stale_days": 2,
+      "approval_pending_minutes": 240,
+      "approval_pending_overnight_minutes": 480,
+      "context_usage_pct": 80,
+      "unanswered_telegram_minutes": 30
+    },
+    "reporting": {
+      "style": "daily_digest",
+      "digest_time": "09:00",
+      "interval": "24h",
+      "report_to": "both",
+      "report_targets": {
+        "telegram": "user",
+        "agent_message": "boss"
+      }
+    }
+  },
+  "approval_required": true,
+  "theta_wave": {
+    "enabled": true,
+    "interval": "24h",
+    "metric": "system_effectiveness",
+    "metric_type": "qualitative_compound",
+    "direction": "higher",
+    "auto_create_agent_cycles": false,
+    "auto_modify_agent_cycles": false
+  }
+}

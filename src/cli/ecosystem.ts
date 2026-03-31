@@ -6,9 +6,10 @@ import { fileURLToPath } from 'url';
 
 export const ecosystemCommand = new Command('ecosystem')
   .option('--instance <id>', 'Instance ID', 'default')
+  .option('--org <name>', 'Organization name (auto-detected if not specified)')
   .option('--output <path>', 'Output file', 'ecosystem.config.js')
   .description('Generate PM2 ecosystem.config.js from agent configs')
-  .action(async (options: { instance: string; output: string }) => {
+  .action(async (options: { instance: string; org?: string; output: string }) => {
     const ctxRoot = join(homedir(), '.cortextos', options.instance);
     const projectRoot = process.cwd();
 
@@ -34,6 +35,13 @@ export const ecosystemCommand = new Command('ecosystem')
       return;
     }
 
+    // Determine org: use --org flag, or auto-detect from first agent found
+    const detectedOrg = options.org || agents.find(a => a.org)?.org || '';
+    if (!detectedOrg) {
+      console.error('Could not determine org. Use --org <name>.');
+      return;
+    }
+
     // Use dist/ in project root for all scripts
     const distDir = join(projectRoot, 'dist');
 
@@ -47,7 +55,9 @@ export const ecosystemCommand = new Command('ecosystem')
         env: {
           CTX_INSTANCE_ID: options.instance,
           CTX_ROOT: ctxRoot,
+          CTX_FRAMEWORK_ROOT: projectRoot,
           CTX_PROJECT_ROOT: projectRoot,
+          CTX_ORG: detectedOrg,
         },
         max_restarts: 10,
         restart_delay: 5000,
