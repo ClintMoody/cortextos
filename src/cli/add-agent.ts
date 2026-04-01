@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync } from 'fs';
 import { join, resolve } from 'path';
 import { OrgContext } from '../types';
 
@@ -98,6 +98,7 @@ export const addAgentCommand = new Command('add-agent')
         'CHAT_ID=',
         '',
       ].join('\n'), 'utf-8');
+      chmodSync(envPath, 0o600); // credentials — owner read/write only
     }
 
     // Generate SYSTEM.md from context.json (static org context only).
