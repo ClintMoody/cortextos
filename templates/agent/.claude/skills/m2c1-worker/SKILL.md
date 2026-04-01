@@ -110,9 +110,9 @@ SETTINGS
 
 If the file already exists (e.g., with MCP config), merge the permissions key into it rather than overwriting.
 
-### 7. Write CLAUDE.md
+### 7. Write AGENTS.md
 
-Write `$PROJECT_DIR/CLAUDE.md` with instructions for the worker:
+Write `$PROJECT_DIR/AGENTS.md` (and a `$PROJECT_DIR/CLAUDE.md` wrapper with `@AGENTS.md`) with instructions for the worker:
 
 ```markdown
 # <Project Name> - M2C1 Autonomous Build
@@ -159,7 +159,7 @@ When you have questions during Phase 3 (Discovery), send them via send-message. 
 When implemented, a worker spawn will:
 - Create an isolated session pointed at `$PROJECT_DIR`
 - Start Claude with `--dangerously-skip-permissions` (workers must never block on permission prompts)
-- Inject an initial prompt: "Read CLAUDE.md for your instructions, then read BRAINDUMP.md for the project spec. Begin the M2C1 workflow starting with Phase 0."
+- Inject an initial prompt: "Read AGENTS.md for your instructions, then read BRAINDUMP.md for the project spec. Begin the M2C1 workflow starting with Phase 0."
 - Register the worker with the bus so it can send messages back to you
 
 ---

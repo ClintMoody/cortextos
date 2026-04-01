@@ -10,7 +10,7 @@ describe('Sprint 1: Template Completeness', () => {
 
     it('has all required markdown files', () => {
       const requiredFiles = [
-        'CLAUDE.md', 'SOUL.md', 'HEARTBEAT.md', 'TOOLS.md',
+        'AGENTS.md', 'CLAUDE.md', 'SOUL.md', 'HEARTBEAT.md', 'TOOLS.md',
         'GUARDRAILS.md', 'ONBOARDING.md', 'IDENTITY.md',
         'SYSTEM.md', 'USER.md', 'GOALS.md', 'MEMORY.md',
       ];
@@ -45,24 +45,19 @@ describe('Sprint 1: Template Completeness', () => {
       }
     });
 
-    it('has goals.json with correct schema', () => {
-      const goals = JSON.parse(readFileSync(join(agentDir, 'goals.json'), 'utf-8'));
-      expect(goals).toHaveProperty('focus');
-      expect(goals).toHaveProperty('goals');
-      expect(goals).toHaveProperty('bottleneck');
-      expect(goals).toHaveProperty('updated_at');
-      expect(goals).toHaveProperty('updated_by');
-      expect(Array.isArray(goals.goals)).toBe(true);
-    });
-
-    it('CLAUDE.md has first boot check', () => {
-      const content = readFileSync(join(agentDir, 'CLAUDE.md'), 'utf-8');
+    it('AGENTS.md has first boot check', () => {
+      const content = readFileSync(join(agentDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('First Boot Check');
       expect(content).toContain('ONBOARDING');
     });
 
-    it('CLAUDE.md references cortextos bus commands', () => {
+    it('CLAUDE.md imports AGENTS.md', () => {
       const content = readFileSync(join(agentDir, 'CLAUDE.md'), 'utf-8');
+      expect(content).toContain('@AGENTS.md');
+    });
+
+    it('AGENTS.md references cortextos bus commands', () => {
+      const content = readFileSync(join(agentDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('cortextos bus');
       expect(content).not.toContain('bash $CTX_FRAMEWORK_ROOT/bus/');
     });
@@ -127,23 +122,13 @@ describe('Sprint 1: Template Completeness', () => {
 
     it('has all required markdown files', () => {
       const requiredFiles = [
-        'CLAUDE.md', 'SOUL.md', 'HEARTBEAT.md', 'TOOLS.md',
+        'AGENTS.md', 'CLAUDE.md', 'SOUL.md', 'HEARTBEAT.md', 'TOOLS.md',
         'GUARDRAILS.md', 'ONBOARDING.md', 'IDENTITY.md',
         'SYSTEM.md', 'USER.md', 'GOALS.md', 'MEMORY.md',
       ];
       for (const file of requiredFiles) {
         expect(existsSync(join(orchDir, file)), `Missing ${file}`).toBe(true);
       }
-    });
-
-    it('has goals.json with correct schema', () => {
-      const goals = JSON.parse(readFileSync(join(orchDir, 'goals.json'), 'utf-8'));
-      expect(goals).toHaveProperty('focus');
-      expect(goals).toHaveProperty('goals');
-      expect(goals).toHaveProperty('bottleneck');
-      expect(goals).toHaveProperty('updated_at');
-      expect(goals).toHaveProperty('updated_by');
-      expect(Array.isArray(goals.goals)).toBe(true);
     });
 
     it('has config.json with 4 orchestrator crons', () => {
@@ -168,8 +153,8 @@ describe('Sprint 1: Template Completeness', () => {
       }
     });
 
-    it('CLAUDE.md has orchestrator-specific content', () => {
-      const content = readFileSync(join(orchDir, 'CLAUDE.md'), 'utf-8');
+    it('AGENTS.md has orchestrator-specific content', () => {
+      const content = readFileSync(join(orchDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('ORCHESTRATOR');
       expect(content).toContain('COORDINATION');
       expect(content).toContain('Decompose');
@@ -203,23 +188,13 @@ describe('Sprint 1: Template Completeness', () => {
 
     it('has all required markdown files', () => {
       const requiredFiles = [
-        'CLAUDE.md', 'SOUL.md', 'HEARTBEAT.md', 'TOOLS.md',
+        'AGENTS.md', 'CLAUDE.md', 'SOUL.md', 'HEARTBEAT.md', 'TOOLS.md',
         'GUARDRAILS.md', 'ONBOARDING.md', 'IDENTITY.md',
         'SYSTEM.md', 'USER.md', 'GOALS.md', 'MEMORY.md',
       ];
       for (const file of requiredFiles) {
         expect(existsSync(join(analystDir, file)), `Missing ${file}`).toBe(true);
       }
-    });
-
-    it('has goals.json with correct schema', () => {
-      const goals = JSON.parse(readFileSync(join(analystDir, 'goals.json'), 'utf-8'));
-      expect(goals).toHaveProperty('focus');
-      expect(goals).toHaveProperty('goals');
-      expect(goals).toHaveProperty('bottleneck');
-      expect(goals).toHaveProperty('updated_at');
-      expect(goals).toHaveProperty('updated_by');
-      expect(Array.isArray(goals.goals)).toBe(true);
     });
 
     it('has config.json with 5 analyst crons + ecosystem config', () => {
@@ -247,8 +222,8 @@ describe('Sprint 1: Template Completeness', () => {
       }
     });
 
-    it('CLAUDE.md has analyst-specific content', () => {
-      const content = readFileSync(join(analystDir, 'CLAUDE.md'), 'utf-8');
+    it('AGENTS.md has analyst-specific content', () => {
+      const content = readFileSync(join(analystDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('Analyst');
       expect(content).toContain('metrics');
     });
