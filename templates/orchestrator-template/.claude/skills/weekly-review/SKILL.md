@@ -187,6 +187,19 @@ MEMEOF
 
 ---
 
+## Custom Metrics
+
+<!-- Added during onboarding — user-specific tracking preferences -->
+<!-- Format: add bullet points below, each with the metric name and how to measure it -->
+
+<!-- Example:
+- **Skool MRR**: screenshot from Skool community settings, extract MRR number
+- **GitHub PRs merged this week**: gh pr list --state merged --json mergedAt | count those in last 7 days
+- **Content pieces published**: count from alex agent completed tasks tagged content
+-->
+
+---
+
 ## Manual Trigger
 
 ```
