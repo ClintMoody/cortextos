@@ -1,6 +1,7 @@
 import { execFileSync, execFile } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
 import type { BusPaths } from '../types/index.js';
 
 /**
@@ -47,7 +48,7 @@ export function queryKnowledgeBase(
 ): KBQueryResponse {
   const { org, agent, scope = 'all', topK = 5, threshold = 0.5, frameworkRoot, instanceId } = options;
 
-  const kbRoot = join(process.env.HOME || '', '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
+  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     CTX_ORG: org,
@@ -129,7 +130,7 @@ export function ingestKnowledgeBase(
 ): void {
   const { org, agent, scope = 'shared', force, frameworkRoot, instanceId } = options;
 
-  const kbRoot = join(process.env.HOME || '', '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
+  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     CTX_ORG: org,
@@ -164,7 +165,7 @@ export function ingestKnowledgeBase(
  * Ensure the knowledge base directories exist for an org.
  */
 export function ensureKBDirs(instanceId: string, org: string): void {
-  const kbRoot = join(process.env.HOME || '', '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
+  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
   const chromaDir = join(kbRoot, 'chromadb');
   if (!existsSync(chromaDir)) {
     mkdirSync(chromaDir, { recursive: true });

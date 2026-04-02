@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, sep } from 'path';
+import { homedir } from 'os';
 import type { AgentConfig, AgentStatus, CtxEnv } from '../types/index.js';
 import { AgentPTY } from '../pty/agent-pty.js';
 import { MessageDedup, injectMessage } from '../pty/inject.js';
@@ -267,13 +268,14 @@ export class AgentProcess {
     const launchDir = this.config.working_directory || this.env.agentDir;
     if (!launchDir) return false;
 
-    // Claude projects dir uses the absolute path with all slashes replaced by dashes
-    // e.g. /Users/foo/agents/boss -> -Users-foo-agents-boss (leading slash becomes -)
+    // Claude projects dir uses the absolute path with all separators replaced by dashes
+    // e.g. /Users/foo/agents/boss -> -Users-foo-agents-boss (leading sep becomes -)
+    // Use homedir() for cross-platform compatibility (HOME is not set on Windows).
     const convDir = join(
-      process.env.HOME || '',
+      homedir(),
       '.claude',
       'projects',
-      launchDir.replace(/\//g, '-'),
+      launchDir.split(sep).join('-'),
     );
 
     try {

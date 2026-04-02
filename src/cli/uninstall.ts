@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { spawnSync } from 'child_process';
 
 export const uninstallCommand = new Command('uninstall')
   .option('--instance <id>', 'Instance ID', 'default')
@@ -27,17 +28,22 @@ export const uninstallCommand = new Command('uninstall')
 
     // Stop PM2 processes if pm2 is available
     try {
-      const { execSync } = require('child_process');
-      const pm2List = execSync('pm2 jlist 2>/dev/null', { encoding: 'utf-8', timeout: 5000 });
-      const processes = JSON.parse(pm2List);
-      const cortextosProcesses = processes.filter((p: { name: string }) =>
-        p.name.startsWith('cortextos-') || p.name.startsWith(`ctx-${instanceId}`),
-      );
-      for (const p of cortextosProcesses) {
-        try {
-          execSync(`pm2 delete ${p.name} 2>/dev/null`, { timeout: 5000 });
-          console.log(`  Stopped PM2 process: ${p.name}`);
-        } catch { /* ignore */ }
+      const pm2Result = spawnSync('pm2', ['jlist'], {
+        encoding: 'utf-8',
+        timeout: 5000,
+        stdio: 'pipe',
+      });
+      if (pm2Result.status === 0 && pm2Result.stdout) {
+        const processes = JSON.parse(pm2Result.stdout);
+        const cortextosProcesses = processes.filter((p: { name: string }) =>
+          p.name.startsWith('cortextos-') || p.name.startsWith(`ctx-${instanceId}`),
+        );
+        for (const p of cortextosProcesses) {
+          const del = spawnSync('pm2', ['delete', p.name], { timeout: 5000, stdio: 'pipe' });
+          if (del.status === 0) {
+            console.log(`  Stopped PM2 process: ${p.name}`);
+          }
+        }
       }
     } catch {
       // PM2 not available, skip
