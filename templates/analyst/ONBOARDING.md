@@ -34,16 +34,39 @@ You are being onboarded as an **Analyst** - the system optimizer and health moni
 
 ### Step 5: Ask for autonomy level
 
-> "How autonomously should I operate?
-> 1. Ask first - propose all improvements before acting
-> 2. Balanced - act on routine monitoring, ask before running experiments (default)
-> 3. Autonomous - run experiments and apply changes independently, report results
+> "How autonomously should I operate? As the analyst, this controls whether I can run experiments on agent behavior and modify improvement cycles without asking first.
+> 1. Ask first - propose all monitoring changes and experiments before acting
+> 2. Balanced - routine monitoring autonomous, ask before running experiments or modifying agent cycles (default)
+> 3. Autonomous - run experiments, create/modify agent research cycles, apply changes independently
 >
 > What's your preference?"
 
 **END YOUR TURN.** The user's answer determines your autonomy config - you need it before continuing.
 
-When you receive their response, update SOUL.md Autonomy Rules section to reflect their preference, then continue from Part 2.
+When you receive their response, continue to Step 5b.
+
+### Step 5b: Write full SOUL.md
+
+The SOUL.md template (`${CTX_FRAMEWORK_ROOT}/templates/analyst/SOUL.md`) contains all 7 operational pillars. You MUST preserve every section when writing. Update these sections with onboarding answers:
+
+- **Personality** (new section, add after the header): personality from Step 2
+- **Autonomy Rules**: autonomy level from Step 5
+- **Day/Night Mode**: replace `{{day_mode_start}}` and `{{day_mode_end}}` with values from context.json
+- **Communication**: update with any style preferences
+
+Do NOT delete or summarize the other sections (System-First, Task Discipline, Memory, Guardrails, Accountability). They are operational rules, not placeholders.
+
+Read the template SOUL.md, merge in the user's answers, write the result:
+```bash
+TEMPLATE=$(cat "${CTX_FRAMEWORK_ROOT}/templates/analyst/SOUL.md")
+ORG_CONTEXT=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json" 2>/dev/null || echo '{}')
+DAY_START=$(echo "$ORG_CONTEXT" | jq -r '.day_mode_start // "08:00"')
+DAY_END=$(echo "$ORG_CONTEXT" | jq -r '.day_mode_end // "00:00"')
+```
+
+Write to `${CTX_AGENT_DIR}/SOUL.md` with all pillars intact, `{{day_mode_start}}`/`{{day_mode_end}}` replaced, personality and autonomy filled in.
+
+Then continue from Part 2.
 
 ## Part 2: Monitoring Setup
 
@@ -119,16 +142,13 @@ echo "$EXISTING" | jq \
 
 ## Part 2c: HEARTBEAT.md Configuration
 
-### Step 10: Customize HEARTBEAT.md
+### Step 10: Configure HEARTBEAT.md
 
-> "Two quick config questions. How long before a goal is considered stale? (default: 7 days) And how long before a task with no updates is flagged as stale? (default: 3 days)"
+Use defaults for staleness thresholds (goals: 7 days, tasks: 3 days) and guardrail self-check (enabled). Write these to HEARTBEAT.md now.
 
-Update the staleness thresholds in HEARTBEAT.md (Step 6 for goals, Step 3 for tasks).
+> "I've set up my heartbeat cycle with default thresholds - goals flagged after 7 days without update, tasks after 3 days. Guardrail self-check enabled. You can tune these anytime by telling me to update my config."
 
-Also ask:
-> "Should I include a guardrail self-check in every heartbeat cycle? This checks that I'm following all my operational rules - adds about 30 seconds per cycle. (default: yes)"
-
-If no: note in HEARTBEAT.md to skip that step.
+If the user objects, adjust. Otherwise move on.
 
 ### Step 11: Check for knowledge base
 
@@ -167,7 +187,7 @@ echo "Day starts: ${DAY_HOUR}:00, Night starts: ${NIGHT_HOUR}:00"
 
 - Heartbeat (every 4h): `Read HEARTBEAT.md and follow its instructions. Update your heartbeat, check inbox, and work on your highest priority task.`
 
-Run `/loop 4h <prompt>`, then verify `config.json` already has a `heartbeat` entry (it does by default — skip adding a duplicate).
+Run `/loop 4h <prompt>`, then verify `config.json` already has a `heartbeat` entry (it does by default - skip adding a duplicate).
 
 The default config also includes a `nightly-metrics` cron (24h) that runs `cortextos bus collect-metrics`. Confirm it exists in config.json and leave it in place.
 
@@ -180,13 +200,19 @@ For each additional cron the user requests:
 
 ### Step 13: Ask for tools and access
 
-> "What systems should I monitor beyond the agent infrastructure? Databases, APIs, dashboards, CI/CD pipelines? If I can see it, I can watch it."
+> "What systems should I monitor beyond the agent infrastructure? Databases, APIs, dashboards, CI/CD pipelines? If I can see it, I can watch it.
+>
+> We can set these up now if you have credentials ready, or I can come back to it later - just tell me to configure a new tool anytime."
 
-For each tool:
+If the user wants to set up later, write the tool names to GOALS.md as a pending item and move on. Do not block onboarding on tool setup.
+
+If setting up now, for each tool:
 - Check if it's accessible
 - Set up credentials if needed
 - Test the connection
 - Store configuration in memory
+
+**END YOUR TURN.** You need the user's tool list before setting up connections.
 
 ## Part 4: Context Import
 
@@ -199,7 +225,9 @@ For each item:
 - Extract relevant information
 - Save to MEMORY.md and daily memory
 
-Initialize MEMORY.md with what you've learned:
+**END YOUR TURN.** Wait for any docs or context the user wants to provide.
+
+When you receive their response, initialize MEMORY.md with what you've learned:
 ```bash
 cat > "${CTX_AGENT_DIR}/MEMORY.md" << 'EOF'
 # Long-Term Memory
@@ -238,6 +266,61 @@ System Analyst for <org name> - monitors health, collects metrics, detects anoma
 - Track KPIs and goal progress
 - Propose system improvements based on data
 ```
+
+### Step 15b: Write SYSTEM.md
+
+Read org context and write full system context:
+
+```bash
+ORG_CONTEXT=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json" 2>/dev/null || echo '{}')
+ORG_NAME=$(echo "$ORG_CONTEXT" | jq -r '.name // "'$CTX_ORG'"')
+TIMEZONE=$(echo "$ORG_CONTEXT" | jq -r '.timezone // "UTC"')
+ORCH=$(echo "$ORG_CONTEXT" | jq -r '.orchestrator // "unknown"')
+DASH_PORT=$(grep -s PORT "${CTX_FRAMEWORK_ROOT}/dashboard/.env.local" | cut -d= -f2 || echo "3000")
+```
+
+Write to `${CTX_AGENT_DIR}/SYSTEM.md`:
+
+```markdown
+# System Context
+
+**Organization:** <org_name>
+**Timezone:** <timezone>
+**Orchestrator:** <orchestrator_name>
+**Dashboard:** http://localhost:<port>
+**Framework:** cortextOS Node.js
+
+---
+
+## Team Roster
+
+<list all agents discovered in Step 6 with their roles>
+
+---
+
+For live agent roster, run:
+```bash
+cortextos bus list-agents
+```
+
+For agent health (last heartbeat per agent), run:
+```bash
+cortextos bus read-all-heartbeats
+```
+```
+
+### Step 15c: Ensure TOOLS.md is the full bus reference
+
+TOOLS.md should contain the complete bus script reference. If the current file is shorter than 100 lines, copy from the template:
+
+```bash
+TOOLS_LINES=$(wc -l < "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null || echo "0")
+if [ "$TOOLS_LINES" -lt 100 ]; then
+  cp "${CTX_FRAMEWORK_ROOT}/templates/analyst/TOOLS.md" "${CTX_AGENT_DIR}/TOOLS.md"
+fi
+```
+
+Do NOT rewrite TOOLS.md from memory. The template contains the authoritative reference.
 
 ### Step 16: Write GOALS.md
 
@@ -298,6 +381,8 @@ Proceed with the rest of the session start protocol in AGENTS.md. Crons are alre
 >
 > Which of these do you want enabled?"
 
+**END YOUR TURN.** You need their ecosystem preferences before writing config.
+
 ### Step 21: Write ecosystem config to config.json
 
 ```bash
@@ -327,17 +412,17 @@ DAILY_HOUR=$(( (NIGHT_HOUR + 1) % 24 ))
 
 For each enabled feature, create the cron and add to config.json:
 
-**local_version_control** — use CronCreate directly (time-anchored):
+**local_version_control** - use CronCreate directly (time-anchored):
 ```
 cron: "0 ${DAILY_HOUR} * * *"
-prompt: "Run daily git snapshot. cortextos bus auto-commit — review the staged diff for PII — commit with descriptive message. Never push."
+prompt: "Run daily git snapshot. cortextos bus auto-commit - review the staged diff for PII - commit with descriptive message. Never push."
 ```
 Add to config.json:
 ```json
-{"name": "auto-commit", "type": "recurring", "cron": "0 <DAILY_HOUR> * * *", "prompt": "Run daily git snapshot. cortextos bus auto-commit — review the staged diff for PII — commit with descriptive message. Never push."}
+{"name": "auto-commit", "type": "recurring", "cron": "0 <DAILY_HOUR> * * *", "prompt": "Run daily git snapshot. cortextos bus auto-commit - review the staged diff for PII - commit with descriptive message. Never push."}
 ```
 
-**upstream_sync** — use CronCreate directly (time-anchored, same hour, 2 minutes offset):
+**upstream_sync** - use CronCreate directly (time-anchored, same hour, 2 minutes offset):
 ```
 cron: "2 ${DAILY_HOUR} * * *"
 prompt: "Check for framework updates: cortextos bus check-upstream. If updates available, explain every change in plain English via Telegram and wait for explicit approval before applying. Never apply during night mode."
@@ -347,7 +432,7 @@ Add to config.json:
 {"name": "check-upstream", "type": "recurring", "cron": "2 <DAILY_HOUR> * * *", "prompt": "Check for framework updates: cortextos bus check-upstream. If updates available, explain every change in plain English via Telegram and wait for explicit approval before applying. Never apply during night mode."}
 ```
 
-**catalog_browse** — use CronCreate directly (weekly, Sunday same hour):
+**catalog_browse** - use CronCreate directly (weekly, Sunday same hour):
 ```
 cron: "4 ${DAILY_HOUR} * * 0"
 prompt: "Browse community catalog: cortextos bus browse-catalog. Surface ONE relevant new item to user via Telegram. If they say install it: cortextos bus install-community-item <name>. If they decline, skip that item for 30 days."
@@ -357,7 +442,7 @@ Add to config.json:
 {"name": "catalog-browse", "type": "recurring", "cron": "4 <DAILY_HOUR> * * 0", "prompt": "Browse community catalog: cortextos bus browse-catalog. Surface ONE relevant new item to user via Telegram. If they say install it: cortextos bus install-community-item <name>. If they decline, skip that item for 30 days."}
 ```
 
-**community_publish** — no cron needed, triggered manually.
+**community_publish** - no cron needed, triggered manually.
 
 ## Part 7: Theta Wave (System Improvement Cycle)
 
@@ -372,6 +457,8 @@ Add to config.json:
 > 2. Should I be able to create new research cycles for agents automatically, or propose them for your approval?
 > 3. Should I be able to modify existing cycles automatically, or propose changes?"
 
+**END YOUR TURN.** You need their theta wave preferences before writing config.
+
 ### Step 25: Merge theta wave config
 
 Merge into `${CTX_AGENT_DIR}/experiments/config.json` (preserve existing monitoring config from Part 2):
@@ -379,7 +466,7 @@ Merge into `${CTX_AGENT_DIR}/experiments/config.json` (preserve existing monitor
 ```bash
 ANALYST_EXP="${CTX_AGENT_DIR}/experiments/config.json"
 EXISTING=$(cat "${ANALYST_EXP}" 2>/dev/null || echo '{}')
-# Add theta_wave key — preserves existing monitoring key set in Step 9
+# Add theta_wave key - preserves existing monitoring key set in Step 9
 echo "$EXISTING" | jq \
   --argjson tw '{
     "enabled": true,
@@ -395,7 +482,16 @@ echo "$EXISTING" | jq \
   > "${ANALYST_EXP}.tmp" && mv "${ANALYST_EXP}.tmp" "${ANALYST_EXP}"
 ```
 
-Set `approval_required`, `auto_create_agent_cycles`, and `auto_modify_agent_cycles` based on user answers to questions 1-3. The `. + {...}` merge only adds new keys — it does not overwrite the `monitoring` key written in Step 9.
+Set `approval_required`, `auto_create_agent_cycles`, and `auto_modify_agent_cycles` based on user answers to questions 1-3. The `. + {...}` merge only adds new keys - it does not overwrite the `monitoring` key written in Step 9.
+
+After writing theta wave config, notify the orchestrator:
+
+```bash
+ORCH_NAME=$(jq -r '.orchestrator // empty' "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json" 2>/dev/null)
+if [ -n "$ORCH_NAME" ]; then
+  cortextos bus send-message "${ORCH_NAME}" normal "Theta wave configured: enabled=true, interval=<interval>, approval_required=<val>, auto_create=<val>, auto_modify=<val>"
+fi
+```
 
 ### Step 26: If theta wave enabled, add cron to config.json
 
@@ -477,11 +573,58 @@ Wait for orchestrator to confirm each specialist is created and their onboarding
 
 If no specialists wanted: proceed to step 29.
 
+### Step 28b: Verify agent is enabled
+
+```bash
+ENABLED=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/enabled-agents.json" 2>/dev/null || echo '[]')
+if ! echo "$ENABLED" | jq -e --arg name "$CTX_AGENT_NAME" '.[] | select(. == $name)' > /dev/null 2>&1; then
+  echo "WARNING: $CTX_AGENT_NAME not found in enabled-agents.json"
+  cortextos bus send-telegram "$CTX_TELEGRAM_CHAT_ID" "Warning: I completed onboarding but I'm not in enabled-agents.json. Run: cortextos start $CTX_AGENT_NAME"
+fi
+```
+
 ### Step 29: Mark analyst onboarding complete
 
 ```bash
 touch "${CTX_ROOT}/state/${CTX_AGENT_NAME}/.onboarded"
 cortextos bus log-event action onboarding_complete info --meta '{"agent":"'$CTX_AGENT_NAME'","role":"analyst"}'
+```
+
+### Step 29b: Verify bootstrap files
+
+Run a self-check of all required bootstrap files. Each must exist and be non-empty:
+
+```bash
+MISSING=""
+for f in IDENTITY.md SOUL.md SYSTEM.md TOOLS.md GOALS.md USER.md MEMORY.md HEARTBEAT.md; do
+  FPATH="${CTX_AGENT_DIR}/${f}"
+  if [ ! -s "$FPATH" ]; then
+    MISSING="${MISSING} ${f}"
+  fi
+done
+
+# TOOLS.md specifically must be the full reference (>100 lines)
+TOOLS_LINES=$(wc -l < "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null || echo "0")
+if [ "$TOOLS_LINES" -lt 100 ]; then
+  MISSING="${MISSING} TOOLS.md(stub)"
+fi
+
+# SOUL.md must have all pillars (>30 lines)
+SOUL_LINES=$(wc -l < "${CTX_AGENT_DIR}/SOUL.md" 2>/dev/null || echo "0")
+if [ "$SOUL_LINES" -lt 30 ]; then
+  MISSING="${MISSING} SOUL.md(incomplete)"
+fi
+
+if [ -n "$MISSING" ]; then
+  echo "BOOTSTRAP CHECK FAILED - missing or incomplete:${MISSING}"
+  cortextos bus log-event error bootstrap_check_failed warning --meta '{"agent":"'$CTX_AGENT_NAME'","missing":"'"${MISSING}"'"}'
+  # Attempt to fix TOOLS.md by copying from template
+  if echo "$MISSING" | grep -q "TOOLS.md"; then
+    cp "${CTX_FRAMEWORK_ROOT}/templates/analyst/TOOLS.md" "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null
+  fi
+else
+  echo "All bootstrap files verified."
+fi
 ```
 
 Deliver the system-ready message:

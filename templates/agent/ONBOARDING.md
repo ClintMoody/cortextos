@@ -11,8 +11,8 @@ This is your first time running. Before starting normal operations, complete thi
 1. **Introduce yourself** via Telegram:
    > "Hey! I'm a new specialist agent that just came online. Before I start working, I need to get set up. Can you help me with a few questions?"
 
-2. **Confirm identity from system config** — your name is already set (do not re-ask):
-   > "I'm **{{CTX_AGENT_NAME}}** (set up via cortextos). Let me verify my config is right — can you confirm my role and personality? What's my vibe: formal, casual, technical, creative?"
+2. **Confirm identity from system config** - your name is already set (do not re-ask):
+   > "I'm **{{CTX_AGENT_NAME}}** (set up via cortextos). Let me verify my config is right - can you confirm my role and personality? What's my vibe: formal, casual, technical, creative?"
 
 3. **Ask for role and responsibilities:**
    > "What kind of work will I be doing? Be specific - the more context you give me, the better I can help. For example: writing code, managing content, doing research, handling operations, etc."
@@ -38,7 +38,7 @@ This is your first time running. Before starting normal operations, complete thi
 
    Also update SOUL.md Communication Style section to reflect these preferences.
 
-6. **Set working hours** — check org config first, only ask if not already set:
+6. **Set working hours** - check org config first, only ask if not already set:
    ```bash
    ORG_HOURS=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json" 2>/dev/null | jq -r '.day_mode_start // empty')
    ```
@@ -57,7 +57,26 @@ This is your first time running. Before starting normal operations, complete thi
 
    **END YOUR TURN.** The user's answer determines your autonomy config.
 
-   When you receive their response, write to SOUL.md Autonomy section, then continue from step 8.
+   When you receive their response, continue to Step 7b.
+
+### Step 7b: Write full SOUL.md
+
+The SOUL.md template (`${CTX_FRAMEWORK_ROOT}/templates/agent/SOUL.md`) contains all 7 operational pillars. You MUST preserve every section when writing. Update only:
+
+- **Autonomy Rules**: from Step 7
+- **Day/Night Mode**: replace `{{day_mode_start}}` and `{{day_mode_end}}` with values from context.json
+- **Communication**: from Step 5
+
+```bash
+TEMPLATE=$(cat "${CTX_FRAMEWORK_ROOT}/templates/agent/SOUL.md")
+ORG_CONTEXT=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json" 2>/dev/null || echo '{}')
+DAY_START=$(echo "$ORG_CONTEXT" | jq -r '.day_mode_start // "08:00"')
+DAY_END=$(echo "$ORG_CONTEXT" | jq -r '.day_mode_end // "00:00"')
+```
+
+Read the template, merge in the user's answers, write the full result to `${CTX_AGENT_DIR}/SOUL.md`. Do NOT delete System-First, Task Discipline, Memory, Guardrails, or Accountability sections. They are operational rules, not placeholders.
+
+Then continue from step 8.
 
 8. **Discover your team:**
    ```bash
@@ -86,13 +105,19 @@ This is your first time running. Before starting normal operations, complete thi
    - If the workflow is complex (multi-step procedure), create a skill file at `.claude/skills/<workflow-name>/SKILL.md` with YAML frontmatter and detailed steps
 
 10. **Ask for tools and access:**
-   > "For each workflow, what tools or services do I need access to? Think: GitHub repos, APIs, databases, Slack, email accounts, specific websites. Let me know what needs credentials and we'll set them up now."
+   > "For each workflow, what tools or services do I need access to? GitHub repos, APIs, databases, Slack, email accounts, specific websites.
+   >
+   > We can set these up now if you have credentials ready, or skip for later - just tell me to configure a new tool anytime."
 
-   For each tool:
+   If the user wants to set up later, write the tool names to GOALS.md as a pending item and move on.
+
+   If setting up now, for each tool:
    - Check if it's already accessible (e.g., `gh auth status`, `curl` a URL)
    - If credentials are needed, guide the user through setup
    - Test the connection and confirm it works
    - Store any configuration notes in the agent's memory
+
+   **END YOUR TURN.** You need the user's tool list before setting up connections.
 
 ## Part 2b: Approval Workflow
 
@@ -112,7 +137,7 @@ Before moving on, explain how approvals work - this is critical for any agent ta
 
     **END YOUR TURN.** The user's answer determines your approval rules.
 
-    When you receive their response, write their answer to SOUL.md under the `## Autonomy Rules` section — this is the single source of truth for approval rules:
+    When you receive their response, write their answer to SOUL.md under the `## Autonomy Rules` section - this is the single source of truth for approval rules:
     ```markdown
     ## Autonomy Rules
     - **No approval needed:** research, drafts, code on feature branches, file updates, task tracking, memory
@@ -143,7 +168,9 @@ After workflows and tools are configured:
 14. **Ask for external context:**
    > "Is there any external information I should import to give me additional context? Documents, repos to clone, reference material, style guides, existing processes I should know about? The more context the better."
 
-   For each item:
+   **END YOUR TURN.** Wait for any docs or context the user wants to provide.
+
+   When you receive their response, for each item:
    - Clone repos if needed
    - Read URLs or documents
    - Save key information to MEMORY.md or daily memory
@@ -172,6 +199,33 @@ After workflows and tools are configured:
    ```
 
    > Approval rules are written to SOUL.md (Step 11), not here.
+
+### Step 15b: Write SYSTEM.md
+
+Read org context and write full system context:
+
+```bash
+ORG_CONTEXT=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/context.json" 2>/dev/null || echo '{}')
+ORG_NAME=$(echo "$ORG_CONTEXT" | jq -r '.name // "'$CTX_ORG'"')
+TIMEZONE=$(echo "$ORG_CONTEXT" | jq -r '.timezone // "UTC"')
+ORCH=$(echo "$ORG_CONTEXT" | jq -r '.orchestrator // "unknown"')
+DASH_PORT=$(grep -s PORT "${CTX_FRAMEWORK_ROOT}/dashboard/.env.local" | cut -d= -f2 || echo "3000")
+```
+
+Write to `${CTX_AGENT_DIR}/SYSTEM.md` with org name, timezone, orchestrator, dashboard URL, and team roster from Step 8.
+
+### Step 15c: Ensure TOOLS.md is the full bus reference
+
+TOOLS.md should contain the complete bus script reference. If the current file is shorter than 100 lines, copy from the template:
+
+```bash
+TOOLS_LINES=$(wc -l < "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null || echo "0")
+if [ "$TOOLS_LINES" -lt 100 ]; then
+  cp "${CTX_FRAMEWORK_ROOT}/templates/agent/TOOLS.md" "${CTX_AGENT_DIR}/TOOLS.md"
+fi
+```
+
+Do NOT rewrite TOOLS.md from memory. The template contains the authoritative reference.
 
 16. **Write GOALS.md** based on their answers:
    ```
@@ -216,6 +270,16 @@ After workflows and tools are configured:
 
     Make any changes they request.
 
+### Step 18b: Verify agent is enabled
+
+```bash
+ENABLED=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/enabled-agents.json" 2>/dev/null || echo '[]')
+if ! echo "$ENABLED" | jq -e --arg name "$CTX_AGENT_NAME" '.[] | select(. == $name)' > /dev/null 2>&1; then
+  echo "WARNING: $CTX_AGENT_NAME not found in enabled-agents.json"
+  cortextos bus send-telegram "$CTX_TELEGRAM_CHAT_ID" "Warning: I completed onboarding but I'm not in enabled-agents.json. Run: cortextos start $CTX_AGENT_NAME"
+fi
+```
+
 19. **Mark onboarding complete and signal orchestrator:**
     ```bash
     touch "${CTX_ROOT}/state/${CTX_AGENT_NAME}/.onboarded"
@@ -231,12 +295,49 @@ After workflows and tools are configured:
     fi
     ```
 
+### Step 19b: Verify bootstrap files
+
+Run a self-check of all required bootstrap files. Each must exist and be non-empty:
+
+```bash
+MISSING=""
+for f in IDENTITY.md SOUL.md SYSTEM.md TOOLS.md GOALS.md USER.md MEMORY.md HEARTBEAT.md; do
+  FPATH="${CTX_AGENT_DIR}/${f}"
+  if [ ! -s "$FPATH" ]; then
+    MISSING="${MISSING} ${f}"
+  fi
+done
+
+# TOOLS.md specifically must be the full reference (>100 lines)
+TOOLS_LINES=$(wc -l < "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null || echo "0")
+if [ "$TOOLS_LINES" -lt 100 ]; then
+  MISSING="${MISSING} TOOLS.md(stub)"
+fi
+
+# SOUL.md must have all pillars (>30 lines)
+SOUL_LINES=$(wc -l < "${CTX_AGENT_DIR}/SOUL.md" 2>/dev/null || echo "0")
+if [ "$SOUL_LINES" -lt 30 ]; then
+  MISSING="${MISSING} SOUL.md(incomplete)"
+fi
+
+if [ -n "$MISSING" ]; then
+  echo "BOOTSTRAP CHECK FAILED - missing or incomplete:${MISSING}"
+  cortextos bus log-event error bootstrap_check_failed warning --meta '{"agent":"'$CTX_AGENT_NAME'","missing":"'"${MISSING}"'"}'
+  # Attempt to fix TOOLS.md by copying from template
+  if echo "$MISSING" | grep -q "TOOLS.md"; then
+    cp "${CTX_FRAMEWORK_ROOT}/templates/agent/TOOLS.md" "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null
+  fi
+else
+  echo "All bootstrap files verified."
+fi
+```
+
 20. **Continue normal bootstrap** - proceed with the rest of the session start protocol in AGENTS.md (crons are already set up from step 9, so skip that step).
 
 ## Part 5: Autoresearch (Experiments)
 
 21. **Explain autoresearch:**
-    > "One more thing — autoresearch is how I improve over time. I run experiments on specific aspects of my work: test a hypothesis, measure the result, keep or discard. Think of me as a scientist iterating on my craft. You can see all experiments on the dashboard under Experiments."
+    > "One more thing - autoresearch is how I improve over time. I run experiments on specific aspects of my work: test a hypothesis, measure the result, keep or discard. Think of me as a scientist iterating on my craft. You can see all experiments on the dashboard under Experiments."
 
 22. **Offer to set up an experiment:**
     > "Do you already know a metric you want me to optimize? For example:
@@ -244,16 +345,16 @@ After workflows and tools are configured:
     > - Dev agent: build reliability, code quality, deploy speed
     > - Comms agent: response rate, inbox zero time, meeting prep quality
     >
-    > You don't need to have one ready now — you can tell me to set up autoresearch anytime. If you do have one in mind, I can configure it now."
+    > You don't need to have one ready now - you can tell me to set up autoresearch anytime. If you do have one in mind, I can configure it now."
 
 23. If user wants to set up now, ask sequentially:
     - (a) What metric to optimize?
-    - (b) What should I experiment on — the "surface"? (a prompt file, a workflow description, a behavior in SOUL.md)
+    - (b) What should I experiment on - the "surface"? (a prompt file, a workflow description, a behavior in SOUL.md)
     - (c) Is the metric quantitative (a number I can script) or qualitative (I score 1-10 myself)?
     - (d) How do I measure it? (script, computed from tasks, or self-evaluation)
     - (e) Higher or lower is better?
     - (f) How long to wait before measuring a result? (the measurement window, e.g. 24h, 48h)
-    - (g) How often should I run the experiment loop? (the cron frequency — often same as window)
+    - (g) How often should I run the experiment loop? (the cron frequency - often same as window)
     - (h) Should I need your approval before running each experiment?
 
     Then set up the cycle and cron. Read `.claude/skills/autoresearch/SKILL.md` for the full setup commands. In brief:
@@ -279,7 +380,7 @@ After workflows and tools are configured:
 
     ```
 
-    Then set up the experiment cron immediately (outside the bash block — execute this as a Claude command):
+    Then set up the experiment cron immediately (outside the bash block - execute this as a Claude command):
 
     `/loop <cron_frequency> Read .claude/skills/autoresearch/SKILL.md and execute the experiment loop.`
 

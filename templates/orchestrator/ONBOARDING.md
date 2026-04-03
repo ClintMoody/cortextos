@@ -399,12 +399,61 @@ cortextos goals generate-md --agent $CTX_AGENT_NAME --org $CTX_ORG
 
 Make any changes they request.
 
+### Step 22b: Verify agent is enabled
+
+```bash
+ENABLED=$(cat "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/enabled-agents.json" 2>/dev/null || echo '[]')
+if ! echo "$ENABLED" | jq -e --arg name "$CTX_AGENT_NAME" '.[] | select(. == $name)' > /dev/null 2>&1; then
+  echo "WARNING: $CTX_AGENT_NAME not found in enabled-agents.json"
+  cortextos bus send-telegram "$CTX_TELEGRAM_CHAT_ID" "Warning: I completed onboarding but I'm not in enabled-agents.json. Run: cortextos start $CTX_AGENT_NAME"
+fi
+```
+
 ### Step 23: Mark onboarding complete
 
 ```bash
 mkdir -p "$CTX_ROOT/state/$CTX_AGENT_NAME"
 touch "$CTX_ROOT/state/$CTX_AGENT_NAME/.onboarded"
 cortextos bus log-event action onboarding_complete info --meta '{"agent":"'$CTX_AGENT_NAME'","role":"orchestrator"}'
+```
+
+### Step 23b: Verify bootstrap files
+
+Run a self-check of all required bootstrap files. Each must exist and be non-empty:
+
+```bash
+MISSING=""
+for f in IDENTITY.md SOUL.md SYSTEM.md TOOLS.md GOALS.md USER.md MEMORY.md HEARTBEAT.md; do
+  FPATH="${CTX_AGENT_DIR}/${f}"
+  if [ ! -s "$FPATH" ]; then
+    MISSING="${MISSING} ${f}"
+  fi
+done
+
+# TOOLS.md specifically must be the full reference (>100 lines)
+TOOLS_LINES=$(wc -l < "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null || echo "0")
+if [ "$TOOLS_LINES" -lt 100 ]; then
+  MISSING="${MISSING} TOOLS.md(stub)"
+fi
+
+# SOUL.md must have all pillars (>30 lines)
+SOUL_LINES=$(wc -l < "${CTX_AGENT_DIR}/SOUL.md" 2>/dev/null || echo "0")
+if [ "$SOUL_LINES" -lt 30 ]; then
+  MISSING="${MISSING} SOUL.md(incomplete)"
+fi
+
+if [ -n "$MISSING" ]; then
+  echo "BOOTSTRAP CHECK FAILED - missing or incomplete:${MISSING}"
+  cortextos bus log-event error bootstrap_check_failed warning --meta '{"agent":"'$CTX_AGENT_NAME'","missing":"'"${MISSING}"'"}'
+  # Attempt to fix TOOLS.md by copying from template
+  if echo "$MISSING" | grep -q "TOOLS.md"; then
+    ROLE="orchestrator"
+    cp "${CTX_FRAMEWORK_ROOT}/templates/${ROLE}/TOOLS.md" "${CTX_AGENT_DIR}/TOOLS.md" 2>/dev/null || \
+    cp "${CTX_FRAMEWORK_ROOT}/templates/agent/TOOLS.md" "${CTX_AGENT_DIR}/TOOLS.md"
+  fi
+else
+  echo "All bootstrap files verified."
+fi
 ```
 
 ---
