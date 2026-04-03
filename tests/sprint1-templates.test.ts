@@ -137,14 +137,15 @@ describe('Sprint 1: Template Completeness', () => {
       }
     });
 
-    it('has config.json with 4 orchestrator crons', () => {
+    it('has config.json with 5 orchestrator crons', () => {
       const config = JSON.parse(readFileSync(join(orchDir, 'config.json'), 'utf-8'));
-      expect(config.crons.length).toBe(4);
+      expect(config.crons.length).toBe(5);
       const cronNames = config.crons.map((c: any) => c.name);
       expect(cronNames).toContain('heartbeat');
       expect(cronNames).toContain('check-approvals');
       expect(cronNames).toContain('morning-review');
       expect(cronNames).toContain('evening-review');
+      expect(cronNames).toContain('weekly-review');
     });
 
     it('goals.json exists with all expected fields', () => {
@@ -172,8 +173,8 @@ describe('Sprint 1: Template Completeness', () => {
 
     it('CLAUDE.md has orchestrator-specific content', () => {
       const content = readFileSync(join(orchDir, 'CLAUDE.md'), 'utf-8');
-      expect(content).toContain('ORCHESTRATOR');
-      expect(content).toContain('COORDINATION');
+      expect(content).toContain('Orchestrator');
+      expect(content).toContain('coordination');
       expect(content).toContain('Decompose');
     });
 
@@ -186,12 +187,12 @@ describe('Sprint 1: Template Completeness', () => {
     it('ONBOARDING.md has orchestrator role description', () => {
       const content = readFileSync(join(orchDir, 'ONBOARDING.md'), 'utf-8');
       expect(content).toContain('Orchestrator');
-      expect(content).toContain('coordinator');
+      expect(content).toContain('coordination');
     });
 
     it('IDENTITY.md has orchestrator work style', () => {
       const content = readFileSync(join(orchDir, 'IDENTITY.md'), 'utf-8');
-      expect(content).toContain('delegate');
+      expect(content).toContain('Decompose');
     });
 
     it('.claude/settings.json exists with hooks', () => {

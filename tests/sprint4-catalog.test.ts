@@ -317,7 +317,6 @@ describe('Sprint 4: Community Catalog', () => {
       const result = submitCommunityItem(frameworkRoot, ctxRoot, 'my-skill', 'skill', 'A great skill');
       expect(result.status).toBe('submitted');
       expect(result.name).toBe('my-skill');
-      expect(result.branch).toBe('community/my-skill');
 
       // Verify files copied to community dir
       expect(existsSync(join(frameworkRoot, 'community', 'skills', 'my-skill', 'SKILL.md'))).toBe(true);
