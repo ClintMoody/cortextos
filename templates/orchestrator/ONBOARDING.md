@@ -45,6 +45,8 @@ If north_star is set: confirm, don't re-ask:
 If north_star is empty, ask once:
 > "I don't see a north star set yet. What's the single most important thing we're working toward?"
 
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, update goals.json if needed and continue from Part 2.
+
 Update goals.json if they provide a new/updated north star:
 ```bash
 jq --arg ns "their answer" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -59,7 +61,7 @@ jq --arg ns "their answer" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 
 These steps establish the orchestrator's role and authority with the user before operations begin.
 
-**CRITICAL: Send ONE message per step, then STOP and WAIT for the user to respond on Telegram before sending the next. Do NOT combine multiple steps into one message. Do NOT proceed to the next step until you receive a Telegram message back. Check inbox between every step.**
+**CRITICAL: After sending each Telegram message below, you MUST end your current response. Do not call any more tools. Do not produce any more text. The user's Telegram reply will be delivered as your next conversation turn via the fast-checker. When you receive it, continue from the next step. ONE message per turn. ONE question per turn.**
 
 ### Step 4: Explain what you do - get confirmation
 
@@ -74,7 +76,7 @@ Send via Telegram:
 >
 > Does this match what you expect from me?"
 
-**STOP. Wait for a Telegram response. Do not send Step 5 until the user replies.**
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, continue from Step 5.
 
 ### Step 5: Explain goal cascade authority
 
@@ -83,9 +85,7 @@ Send via Telegram:
 >
 > You can always override by messaging me, messaging your agents directly, or editing their goals.json directly. Is this workflow okay with you?"
 
-**STOP. Wait for a Telegram response before continuing.**
-
-Write user's answer to SOUL.md under Autonomy Rules.
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, write their answer to SOUL.md under Autonomy Rules, then continue from Step 6.
 
 ### Step 6: Explain nighttime-mode guardrails
 
@@ -100,7 +100,7 @@ Send via Telegram:
 >
 > Everything external waits until you're back online. Sound right?"
 
-**STOP. Wait for a Telegram response before continuing.**
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, continue from Step 7.
 
 ### Step 7: Explain approval and human task monitoring
 
@@ -109,25 +109,21 @@ Send via Telegram:
 >
 > Is 2 hours the right frequency, or do you want reminders more/less often?"
 
-**STOP. Wait for a Telegram response before continuing.**
-
-Write their answer to config.json (update the check-approvals cron interval if they want a different frequency).
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, write their answer to config.json (update the check-approvals cron interval if they want a different frequency), then continue from Step 8.
 
 ### Step 8: Communication style
 
 Send via Telegram:
 > "How do you want me to message you? Brief bullets or detailed? Emoji yes/no? When agents finish overnight tasks - summary in morning briefing or ping you immediately?"
 
-**STOP. Wait for a Telegram response before continuing.**
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, continue from Step 9.
 
 ### Step 9: Weekly review preferences
 
 Send via Telegram:
 > "Any specific things to track in the weekly review - metrics, milestones, agent performance? Or use the default template?"
 
-**STOP. Wait for a Telegram response before continuing.**
-
-If they have custom preferences, write them to `.claude/skills/weekly-review/SKILL.md` under a `## Custom Metrics` section.
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, write any custom preferences to `.claude/skills/weekly-review/SKILL.md` under a `## Custom Metrics` section, then continue from Step 10.
 
 ### Step 10: Fleet health and agent spawning (informational - no response needed)
 
@@ -426,7 +422,7 @@ Tell the user:
 > 2. Send `/newbot` and follow the prompts
 > 3. Copy the bot token it gives you and send it here"
 
-Wait for the token.
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply with the bot token will be delivered as your next conversation turn. When you receive it, continue from Step 25.
 
 ### Step 25: Get the analyst's chat ID
 
@@ -435,7 +431,9 @@ Wait for the token.
 curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates?timeout=30" | jq '.result[-1].message.chat.id'
 ```
 
-Tell the user: "Got it. Send /start and then any message to your new analyst bot, then tell me the chat ID (or I'll read it automatically after 30 seconds)."
+Tell the user: "Got it. Send /start and then any message to your new analyst bot, then tell me when you've done that."
+
+**END YOUR TURN HERE.** Do not call any more tools or produce any more output. The user's Telegram reply will be delivered as your next conversation turn. When you receive it, auto-detect the chat ID using the curl command above, then continue from Step 26.
 
 ### Step 26: Create and enable the analyst agent
 

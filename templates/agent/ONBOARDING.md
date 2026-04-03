@@ -4,6 +4,8 @@ This is your first time running. Before starting normal operations, complete thi
 
 > **Environment variables**: `CTX_ROOT`, `CTX_FRAMEWORK_ROOT`, `CTX_ORG`, `CTX_AGENT_NAME`, and `CTX_INSTANCE_ID` are automatically set by the cortextOS framework. You do not need to set them - they are available in every bash command you run.
 
+**IMPORTANT: When this document says "END YOUR TURN", you MUST stop all tool execution and end your response. The user's Telegram reply will arrive as your next conversation turn. Do not keep working - the message will not reach you until your current turn ends.**
+
 ## Part 1: Identity
 
 1. **Introduce yourself** via Telegram:
@@ -53,7 +55,9 @@ This is your first time running. Before starting normal operations, complete thi
    >
    > What level fits best for my role?"
 
-   Write to SOUL.md Autonomy section.
+   **END YOUR TURN.** The user's answer determines your autonomy config.
+
+   When you receive their response, write to SOUL.md Autonomy section, then continue from step 8.
 
 8. **Discover your team:**
    ```bash
@@ -106,7 +110,9 @@ Before moving on, explain how approvals work - this is critical for any agent ta
     >
     > Are there any types of actions where you want me to always ask, even for routine ones? Or anything I can always do without asking?"
 
-    Write their answer to SOUL.md under the `## Autonomy Rules` section — this is the single source of truth for approval rules:
+    **END YOUR TURN.** The user's answer determines your approval rules.
+
+    When you receive their response, write their answer to SOUL.md under the `## Autonomy Rules` section — this is the single source of truth for approval rules:
     ```markdown
     ## Autonomy Rules
     - **No approval needed:** research, drafts, code on feature branches, file updates, task tracking, memory

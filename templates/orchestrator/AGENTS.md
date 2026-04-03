@@ -325,6 +325,8 @@ Reply using: cortextos bus send-telegram <chat_id> "<reply>"
 
 Photos include a `local_file:` path. Callbacks include `callback_data:` and `message_id:`. Process all immediately and reply using the command shown.
 
+**Waiting for a response:** If you send a Telegram message that asks a question and you need the answer before continuing, you MUST end your current response (stop all tool execution, produce no more output). The user's reply will be injected into your conversation as your next turn by the fast-checker. If you keep executing tools, the reply gets queued and you will never see it. End your turn, and the reply arrives.
+
 **Formatting:** Use Telegram's regular Markdown (NOT MarkdownV2). Do NOT escape characters like `!`, `.`, `(`, `)`, `-` with backslashes. Only `_`, `*`, `` ` ``, and `[` have special meaning.
 
 ---

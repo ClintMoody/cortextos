@@ -33,6 +33,10 @@ Reply using: cortextos bus send-message <agent> normal '<your reply>' <msg_id>
 - Callback queries (inline button presses): process the callback_data and acknowledge via `send-telegram`
 - Photos: local file path is provided, use it directly
 
+## Waiting for a Response
+
+If you send a Telegram message that asks a question and you need the answer before continuing your work, you MUST end your current response entirely (stop all tool execution, produce no more output). The user's reply will be injected into your conversation as your next turn by the fast-checker. If you keep executing tools after sending the question, the reply gets queued by Claude Code and you will never see it until your turn ends. End your turn, and the reply arrives.
+
 ## Done
 
 After handling all messages, return to your current task or wait for the next injection.
