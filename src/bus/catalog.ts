@@ -94,14 +94,7 @@ function isValidItemName(name: string): boolean {
 // --- Catalog path resolution ---
 
 function findCatalogPath(frameworkRoot: string): string {
-  const candidates = [
-    join(frameworkRoot, 'community', 'catalog.json'),
-    join(process.cwd(), 'community', 'catalog.json'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  return candidates[0]; // default even if not found
+  return join(frameworkRoot, 'community', 'catalog.json');
 }
 
 function getInstalledPath(ctxRoot: string): string {
