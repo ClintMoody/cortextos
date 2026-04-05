@@ -1388,3 +1388,8 @@ busCommand
   .command('hook-planmode-telegram')
   .description('ExitPlanMode hook: send plan for review to Telegram (cross-platform)')
   .action(() => runHook('hook-planmode-telegram'));
+
+busCommand
+  .command('hook-compact-telegram')
+  .description('PreCompact hook: notify user via Telegram when context compaction starts (#18)')
+  .action(() => runHook('hook-compact-telegram'));
