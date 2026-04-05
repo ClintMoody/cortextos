@@ -11,6 +11,7 @@ import { createExperiment, runExperiment, evaluateExperiment, listExperiments, g
 import { browseCatalog, installCommunityItem, prepareSubmission, submitCommunityItem } from '../bus/catalog.js';
 import { collectMetrics, parseUsageOutput, storeUsageData, checkUpstream, collectTelegramCommands, registerTelegramCommands } from '../bus/metrics.js';
 import { createApproval, updateApproval } from '../bus/approval.js';
+import { createReminder, listReminders, ackReminder, pruneReminders } from '../bus/reminders.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
@@ -1302,6 +1303,75 @@ busCommand
     } else {
       console.log(JSON.stringify(approvals, null, 2));
     }
+  });
+
+// ---------------------------------------------------------------------------
+// Reminder commands — persistent cron state that survives hard-restarts (#69)
+// ---------------------------------------------------------------------------
+
+busCommand
+  .command('create-reminder')
+  .argument('<fire-at>', 'When to fire, ISO 8601 UTC (e.g. 2026-04-05T08:00:00Z)')
+  .argument('<prompt>', 'Text to inject into boot prompt when overdue')
+  .description('Create a persistent reminder that survives hard-restarts')
+  .action((fireAt: string, prompt: string) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const reminder = createReminder(paths, fireAt, prompt);
+    console.log(reminder.id);
+  });
+
+busCommand
+  .command('list-reminders')
+  .option('--all', 'Include acked reminders', false)
+  .option('--format <fmt>', 'Output format: json or text', 'text')
+  .description('List pending (or all) reminders')
+  .action((opts: { all?: boolean; format?: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const reminders = listReminders(paths, { all: opts.all });
+
+    if (opts.format === 'json') {
+      console.log(JSON.stringify(reminders, null, 2));
+      return;
+    }
+
+    if (reminders.length === 0) {
+      console.log('No pending reminders');
+      return;
+    }
+
+    const now = Date.now();
+    for (const r of reminders) {
+      const overdue = Date.parse(r.fire_at) <= now;
+      const overdueTag = overdue ? ' [OVERDUE]' : '';
+      console.log(`[${r.id}]${overdueTag}`);
+      console.log(`  fire_at: ${r.fire_at}  status: ${r.status}`);
+      console.log(`  prompt:  ${r.prompt}`);
+      console.log('');
+    }
+  });
+
+busCommand
+  .command('ack-reminder')
+  .argument('<id>', 'Reminder ID to acknowledge')
+  .description('Mark a reminder as handled')
+  .action((id: string) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    ackReminder(paths, id);
+    console.log(`ACK'd reminder ${id}`);
+  });
+
+busCommand
+  .command('prune-reminders')
+  .option('--days <n>', 'Retain acked reminders for N days', '7')
+  .description('Delete acked reminders older than N days')
+  .action((opts: { days?: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const pruned = pruneReminders(paths, parseInt(opts.days ?? '7', 10));
+    console.log(`Pruned ${pruned} acked reminder(s)`);
   });
 
 busCommand
