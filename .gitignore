@@ -39,3 +39,6 @@ knowledge-base/venv/
 knowledge-base/__pycache__/
 knowledge-base/scripts/__pycache__/
 tests/playwright/dashboard-ui.spec.ts
+
+# Local ops docs (personal, not for public repo)
+docs/
