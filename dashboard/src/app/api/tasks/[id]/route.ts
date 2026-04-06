@@ -248,6 +248,32 @@ export async function PATCH(
       throw new Error(spawnResult.stderr || spawnResult.stdout || 'Script failed');
     }
 
+    // Notify the task creator when a task is completed or status changes significantly.
+    // This is how agents find out their blocked tasks can be unblocked.
+    if (task?.source_file) {
+      try {
+        const fs = await import('fs/promises');
+        const raw = await fs.default.readFile(task.source_file, 'utf-8');
+        const taskData = JSON.parse(raw);
+        const createdBy: string | undefined = taskData.created_by;
+        // Only notify agents (not 'dashboard', 'human', etc.)
+        const agentNames = new Set(['dashboard', 'human', 'user', 'james']);
+        if (createdBy && !agentNames.has(createdBy)) {
+          const msg = status === 'completed'
+            ? `Human task completed by user: [${id}] ${task.title} — you can now unblock your work`
+            : `Task status updated to ${status}: [${id}] ${task.title}`;
+          spawnSync(
+            'node',
+            [
+              path.join(frameworkRoot, 'dist', 'cli.js'),
+              'bus', 'send-message', createdBy, 'normal', msg,
+            ],
+            { timeout: 5000, stdio: 'pipe', env },
+          );
+        }
+      } catch { /* non-fatal */ }
+    }
+
     // Trigger sync so subsequent reads reflect the update
     try {
       syncAll();
