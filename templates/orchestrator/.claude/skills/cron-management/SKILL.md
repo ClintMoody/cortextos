@@ -17,7 +17,7 @@ triggers: ["remind me", "every day", "every hour", "every week", "schedule", "re
 
 **Once** — fires at a specific datetime, then is deleted.
 ```json
-{ "name": "remind-james-3pm", "type": "once", "fire_at": "2026-04-02T15:00:00Z", "prompt": "Remind James about the 3pm call." }
+{ "name": "remind-user-3pm", "type": "once", "fire_at": "2026-04-02T15:00:00Z", "prompt": "Remind the user about the 3pm call." }
 ```
 
 `type` defaults to `"recurring"` if omitted (backward compatible with existing config.json files).
@@ -54,7 +54,7 @@ When a user asks for a one-time reminder (e.g. "remind me at 3pm"):
 
 1. Write to `config.json` first:
    ```json
-   { "name": "remind-james-3pm", "type": "once", "fire_at": "2026-04-02T15:00:00Z", "prompt": "Remind James about the 3pm call." }
+   { "name": "remind-user-3pm", "type": "once", "fire_at": "2026-04-02T15:00:00Z", "prompt": "Remind the user about the 3pm call." }
    ```
 2. Create the live cron via CronCreate with `recurring: false` and the cron expression for that time
 3. After the reminder fires, delete the entry from config.json

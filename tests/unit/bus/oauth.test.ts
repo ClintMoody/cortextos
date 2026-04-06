@@ -24,7 +24,7 @@ const SAMPLE_STORE = {
   active: 'primary',
   accounts: {
     primary: {
-      label: 'James Primary',
+      label: 'Primary Account',
       access_token: 'tok_primary_abc',
       refresh_token: 'rtok_primary_xyz',
       expires_at: Date.now() + FOUR_HOURS_MS,
@@ -33,7 +33,7 @@ const SAMPLE_STORE = {
       seven_day_utilization: 0.2,
     },
     secondary: {
-      label: 'James Secondary',
+      label: 'Secondary Account',
       access_token: 'tok_secondary_def',
       refresh_token: 'rtok_secondary_uvw',
       expires_at: Date.now() + FOUR_HOURS_MS,

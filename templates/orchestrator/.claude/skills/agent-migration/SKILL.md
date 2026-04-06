@@ -77,7 +77,7 @@ Read these source files carefully before writing anything:
 
 Read the entire file. For each entry ask: *Is this still true about the world? Or is it a patch for an old system bug?*
 
-**Keep:** User preferences, business facts, workflow rules James set, contact info, system account details, discovered patterns that are genuinely useful.
+**Keep:** User preferences, business facts, workflow rules the user set, contact info, system account details, discovered patterns that are genuinely useful.
 
 **Discard:** Entries referencing old file paths, old bus scripts, old system internals, session-specific state, error workarounds.
 
@@ -87,7 +87,7 @@ Rewrite kept entries as clean bullet points in the new agent's MEMORY.md.
 
 Read each row. For each ask: *Did the user set this rule, or did the agent add it because of a system bug?*
 
-**Keep:** Rows that encode James's explicit preferences (e.g. "always approval before external comms", "never add Skool customers to CRM").
+**Keep:** Rows that encode the user's explicit preferences (e.g. "always approval before external comms", "never email customers without approval").
 
 **Discard:** Rows that reference old bus scripts, old file paths, or are clearly bug-workarounds (e.g. "always use X script instead of Y because Y crashes").
 
@@ -99,7 +99,7 @@ This is pure knowledge about the user. Port all of it. Rewrite in v2 USER.md for
 
 ### IDENTITY.md → port role, vibe, work style
 
-Extract: name, role, emoji, vibe, work style bullets. Rewrite in v2 IDENTITY.md format. Update any references from old orchestrator name to new orchestrator name (e.g. paul → paul2).
+Extract: name, role, emoji, vibe, work style bullets. Rewrite in v2 IDENTITY.md format. Update any references from old orchestrator name to new orchestrator name (e.g. boss → boss2).
 
 ### SOUL.md → write fresh, inform with old
 
@@ -150,7 +150,7 @@ cp -r "$SOURCE_DIR/meetings" \
   "$CTX_FRAMEWORK_ROOT/orgs/$CTX_ORG/agents/<new_name>/"
 ```
 
-Preserve the existing category structure (business/, personal/, skool/, spr/, etc.).
+Preserve the existing category structure (e.g. business/, personal/, etc.).
 
 ### Documents
 

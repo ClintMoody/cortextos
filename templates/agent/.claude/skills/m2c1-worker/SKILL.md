@@ -206,7 +206,7 @@ Base your answers on:
 - Your domain knowledge as a cortextOS agent
 - The org's goals and constraints (GOALS.md, knowledge.md)
 
-If you do not know the answer, make a reasonable decision and note it. Do not block the worker with "ask James" unless it is truly a human-only decision.
+If you do not know the answer, make a reasonable decision and note it. Do not block the worker with "ask the user" unless it is truly a human-only decision.
 
 ### Handling Stuck States
 
@@ -416,7 +416,7 @@ cortextos bus send-message $CTX_ORCHESTRATOR_AGENT normal \
 ## Anti-Patterns
 
 - **Doing the work yourself** instead of letting the worker do it
-- **Answering "ask James"** for decisions you can make (only escalate truly human-only decisions)
+- **Answering "ask the user"** for decisions you can make (only escalate truly human-only decisions)
 - **Not checking the worker** for hours (it may be stuck)
 - **Skipping the synergy review** (tasks will conflict)
 - **Accepting untested output** (always verify E2E)

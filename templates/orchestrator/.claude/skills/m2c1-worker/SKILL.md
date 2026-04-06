@@ -25,7 +25,7 @@ You provide the brain dump, answer discovery questions, help with tool setup, mo
 
 ## Prerequisites
 
-- M2C1 skill files available (copy from grandamenium/paul-workspace if not local)
+- M2C1 skill files available (bundled in cortextos templates)
 - A clear project idea or brain dump
 - An isolated directory for the build
 - Worker session spawn mechanism available (`cortextos spawn-worker`)
@@ -53,11 +53,7 @@ mkdir -p .claude/skills/m2c1/artifact-templates
 
 # From GitHub (if not local)
 for file in SKILL.md orchestration-workflow.md; do
-  gh api "repos/grandamenium/paul-workspace/contents/skills/m2c1/$file" --jq '.content' | base64 -d > ".claude/skills/m2c1/$file"
-done
-
-for file in $(gh api repos/grandamenium/paul-workspace/contents/skills/m2c1/artifact-templates --jq '.[].name'); do
-  gh api "repos/grandamenium/paul-workspace/contents/skills/m2c1/artifact-templates/$file" --jq '.content' | base64 -d > ".claude/skills/m2c1/artifact-templates/$file"
+  gh api "repos/grandamenium/cortextos/contents/templates/agent/.claude/skills/m2c1/$file" --jq '.content' | base64 -d > ".claude/skills/m2c1/$file"
 done
 ```
 
@@ -210,7 +206,7 @@ Base your answers on:
 - Your domain knowledge as a cortextOS agent
 - The org's goals and constraints (GOALS.md, knowledge.md)
 
-If you do not know the answer, make a reasonable decision and note it. Do not block the worker with "ask James" unless it is truly a human-only decision.
+If you do not know the answer, make a reasonable decision and note it. Do not block the worker with "ask the user" unless it is truly a human-only decision.
 
 ### Handling Stuck States
 
@@ -420,7 +416,7 @@ cortextos bus send-message $CTX_ORCHESTRATOR_AGENT normal \
 ## Anti-Patterns
 
 - **Doing the work yourself** instead of letting the worker do it
-- **Answering "ask James"** for decisions you can make (only escalate truly human-only decisions)
+- **Answering "ask the user"** for decisions you can make (only escalate truly human-only decisions)
 - **Not checking the worker** for hours (it may be stuck)
 - **Skipping the synergy review** (tasks will conflict)
 - **Accepting untested output** (always verify E2E)

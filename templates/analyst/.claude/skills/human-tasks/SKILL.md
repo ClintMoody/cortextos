@@ -63,7 +63,7 @@ The instructions field should be complete enough that the human can execute with
 
 **Bad:** "Set up the API key"
 
-**Good:** "1. Go to openai.com/account/api-keys. 2. Click 'Create new secret key'. 3. Name it 'cortextos-lifeos'. 4. Copy the key (starts with sk-...). 5. Open Terminal and run: echo 'OPENAI_API_KEY=<your-key>' >> ~/cortextos/orgs/lifeos/.env"
+**Good:** "1. Go to openai.com/account/api-keys. 2. Click 'Create new secret key'. 3. Name it 'cortextos-myorg'. 4. Copy the key (starts with sk-...). 5. Open Terminal and run: echo 'OPENAI_API_KEY=<your-key>' >> ~/cortextos/orgs/myorg/.env"
 
 ---
 

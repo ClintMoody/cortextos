@@ -526,7 +526,7 @@ DASH_PORT=$(grep -s PORT "${CTX_FRAMEWORK_ROOT}/dashboard/.env.local" | cut -d= 
 echo "http://localhost:${DASH_PORT}"
 ```
 
-> "One more thing before we wrap up - would you like a quick tour of the web dashboard? It's live right now at http://localhost:[PORT] (login: admin / cortextos). I can walk you through what each page shows and how to use it."
+> "One more thing before we wrap up - would you like a quick tour of the web dashboard? It's live right now at http://localhost:[PORT] (use the credentials you set during setup). I can walk you through what each page shows and how to use it."
 
 If yes, walk through each section:
 - **Agents page** - status of every agent, last heartbeat, current task

@@ -12,7 +12,7 @@ Telegram chat
 You:     Morning. What did you ship overnight?
 Boss:    Overnight recap: completed 4 tasks, ran 2 theta-wave
          experiments, drafted 3 content scripts. One item needs
-         your approval — I want to email the CoinTally beta list.
+         your approval — I want to email the beta waitlist.
          Check the dashboard or reply "approve".
 
 You:     approve

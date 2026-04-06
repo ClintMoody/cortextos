@@ -152,7 +152,7 @@ cortextos bus hard-restart --reason "context exhaustion"
 
 ```bash
 # Soft restart another agent via message bus
-cortextos bus send-message donna high "soft-restart" "goal refresh"
+cortextos bus send-message assistant high "soft-restart" "goal refresh"
 
 # Check status after restart
 cortextos status
@@ -164,7 +164,7 @@ cortextos status
 
 ```bash
 AGENT="sentinel"
-ORG="lifeos"
+ORG="myorg"
 NEW_MODEL="claude-sonnet-4-6"  # or "claude-opus-4-6" or "claude-haiku-4-5-20251001"
 
 # Step 1: Update config.json
@@ -196,8 +196,8 @@ cortextos bus send-message "$AGENT" high "soft-restart" "model change to $NEW_MO
 Guide the user through BotFather:
 1. Open Telegram, message @BotFather
 2. Send `/newbot`
-3. Enter display name (e.g., "Donna - LifeOS Assistant")
-4. Enter username (must end in `bot`, e.g., `donna_lifeos_bot`)
+3. Enter display name (e.g., "Assistant - MyOrg Bot")
+4. Enter username (must end in `bot`, e.g., `assistant_myorg_bot`)
 5. Copy the token (format: `1234567890:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`)
 
 ### Getting Chat ID
@@ -214,8 +214,8 @@ curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates" | \
 ### Updating a Bot Token
 
 ```bash
-AGENT="donna"
-ORG="lifeos"
+AGENT="assistant"
+ORG="myorg"
 
 # Edit .env (replace BOT_TOKEN line)
 sed -i '' "s/^BOT_TOKEN=.*/BOT_TOKEN=<new_token>/" \
@@ -262,7 +262,7 @@ fi
 ### Adding a Cron
 ```bash
 AGENT="sentinel"
-ORG="lifeos"
+ORG="myorg"
 
 node -e "
 const fs = require('fs');

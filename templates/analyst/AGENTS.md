@@ -368,7 +368,7 @@ Always include `msg_id` as reply_to — this auto-ACKs the original. Un-ACK'd me
 All crons — recurring schedules AND one-shot reminders — live in `config.json` under the `crons` array. Write to config.json FIRST, then create the live cron.
 
 **Recurring:** `{"name": "heartbeat", "type": "recurring", "interval": "4h", "prompt": "..."}`
-**One-shot:** `{"name": "remind-james", "type": "once", "fire_at": "2026-04-02T15:00:00Z", "prompt": "..."}`
+**One-shot:** `{"name": "remind-user", "type": "once", "fire_at": "2026-04-02T15:00:00Z", "prompt": "..."}`
 
 **On every session start:** Run CronList first (no duplicates). Recreate recurring crons with `/loop`; recreate once crons with CronCreate only if `fire_at` is still in the future — delete expired entries from config.json. Never tell the user a cron is active without confirming it in CronList.
 

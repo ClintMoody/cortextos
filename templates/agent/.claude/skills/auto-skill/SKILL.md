@@ -1,6 +1,6 @@
 ---
 name: auto-skill
-description: "You just completed a complex task that required 8+ distinct tool calls, or you noticed you are solving the same type of problem for the third time. Create a skill candidate draft so this workflow can be reused in future sessions without rediscovery. Draft goes to skills/drafts/ — never auto-activates until James approves."
+description: "You just completed a complex task that required 8+ distinct tool calls, or you noticed you are solving the same type of problem for the third time. Create a skill candidate draft so this workflow can be reused in future sessions without rediscovery. Draft goes to skills/drafts/ — never auto-activates until the user approves."
 triggers: ["create skill", "draft skill", "skill candidate", "auto-skill", "I've done this before", "skill from task", "save this workflow", "make this a skill", "approve skill", "reject skill", "activate skill"]
 ---
 
@@ -76,7 +76,7 @@ status: draft
 
 ## Approval Gate
 
-[Does any step require James approval? Specify exactly which step.]
+[Does any step require user approval? Specify exactly which step.]
 
 ## Notes / Edge Cases
 
@@ -111,7 +111,7 @@ cortextos bus log-event action skill_draft_created info --meta "{\"skill\":\"[sk
 cortextos bus send-message $CTX_ORCHESTRATOR_AGENT normal "Skill candidate drafted: [skill-name] — source task [task_id]. Check skills/drafts/[skill-name]/SKILL.md. Awaiting digest review."
 ```
 
-The orchestrator includes it in the next morning briefing for James. James replies `approve [skill-name]`, `reject [skill-name] [reason]`, or `revise [skill-name] [feedback]`.
+The orchestrator includes it in the next morning briefing for the user. The user replies `approve [skill-name]`, `reject [skill-name] [reason]`, or `revise [skill-name] [feedback]`.
 
 ---
 
@@ -131,7 +131,7 @@ sed -i '' 's/status: draft/status: active/' .claude/skills/[skill-name]/SKILL.md
 # Log activation
 cortextos bus log-event action skill_activated info --meta "{\"skill\":\"[skill-name]\",\"agent\":\"$CTX_AGENT_NAME\"}"
 
-# Notify James
+# Notify the user
 cortextos bus send-telegram $CTX_TELEGRAM_CHAT_ID "Skill activated: [skill-name] is now live and will be used in future sessions."
 
 # ACK the inbox message
@@ -179,7 +179,7 @@ Drafts older than 14 days with no action: move to `skills/archive/` and log `ski
 
 ## Critical Rules
 
-1. **No automated commits** — skill files are never committed without explicit James approval
+1. **No automated commits** — skill files are never committed without explicit user approval
 2. **Draft means invisible** — agents do NOT load or execute skills from `skills/drafts/`
 3. **No self-modification** — skills never modify other skills (v2 feature)
 4. **No external calls without gates** — any skill step with external side effects must document its own approval requirement
