@@ -234,26 +234,77 @@ cortextos bus send-message <agent> normal "Your goals are set for today. Check G
 
 ---
 
+## Part 5b: Migration from Previous Agent or Workspace
+
+Before knowledge base setup, check if the user is migrating:
+
+> "Are you setting this system up from scratch, or migrating from an existing cortextOS instance or another workspace?
+>
+> If you have an existing setup, I can import your agent memory files, copy over skills and workflows, and re-ingest your knowledge base. This saves hours of setup time."
+
+**END YOUR TURN.** If no migration, skip to Part 6. If yes:
+
+- Ask for the old agent/workspace directory path
+- Copy MEMORY.md and memory/ files: `cp -r <old_dir>/memory ${CTX_AGENT_DIR}/memory`
+- Copy any custom skills from `.claude/skills/`
+- Note all migrated items in today's memory file
+
+---
+
 ## Part 6: Knowledge Base
 
-### Step 15: Check for knowledge base and ingest org docs
+### Step 15: Set up Knowledge Base (REQUIRED)
 
 ```bash
-[ -f "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" ] && \
-  grep -q GEMINI_API_KEY "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" && \
-  echo "KB enabled" || echo "no KB"
+KB_STATUS=$([ -f "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" ] && \
+  grep -q "^GEMINI_API_KEY=." "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" && \
+  echo "enabled" || echo "not configured")
+echo "Knowledge Base: $KB_STATUS"
 ```
 
-If KB is enabled:
-> "Your org has a knowledge base I can query. I'll ingest your org knowledge file automatically. Any additional docs you want me to have access to? (file paths, URLs)"
+**If NOT configured**, tell the user:
+> "The knowledge base (semantic search + RAG) is a critical dependency for your agents to share context and search their memory. Without it, agents can't query past learnings or cross-reference each other's work.
+>
+> To enable it: get a free Gemini API key at https://aistudio.google.com/app/apikey and add it to orgs/${CTX_ORG}/secrets.env as GEMINI_API_KEY=<key>. I'll wait, or you can continue without it and add it later (recommended to set up before going live)."
 
+**END YOUR TURN** if waiting for the user to add the key.
+
+**If KB is enabled**, continue:
+> "Knowledge base is ready. I'll now set up ingestion rules — this determines what I remember and how I share context with other agents.
+>
+> A few quick questions:"
+
+(a) Ask: > "Which docs should I keep in the shared org knowledge base? Things all agents should know about — your company docs, style guides, key processes, product context."
+
+(b) Ask: > "What should only I have access to? (Orchestrator-private context — strategic docs, decision history, financial info)"
+
+(c) Ask: > "Are there any files or directories to never ingest? (Private, sensitive, or too large)"
+
+**END YOUR TURN.** Wait for answers.
+
+Based on their answers, write rules to `.claude/skills/memory/SKILL.md` under a new section:
+```markdown
+## Knowledge Base Ingestion Rules (set during onboarding)
+
+### Shared org KB (all agents can read):
+- <list from answer (a)>
+
+### Private (orchestrator only):
+- <list from answer (b)>
+
+### Never ingest:
+- <list from answer (c)>
+```
+
+Then do the initial ingestion:
 ```bash
 # Ingest org knowledge base
 cortextos bus kb-ingest "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/knowledge.md" \
  --org $CTX_ORG --scope shared
-```
 
-Ingest any additional docs the user provides.
+# Ingest any specific docs the user listed
+# cortextos bus kb-ingest <path> --org $CTX_ORG --scope <shared|private> --agent $CTX_AGENT_NAME
+```
 
 ---
 

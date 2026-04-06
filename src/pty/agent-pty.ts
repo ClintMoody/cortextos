@@ -114,6 +114,14 @@ export class AgentPTY {
     if (ptyEnv['CHAT_ID']) {
       ptyEnv['CTX_TELEGRAM_CHAT_ID'] = ptyEnv['CHAT_ID'];
     }
+    // CTX_TIMEZONE: from config.json timezone field, falls back to system TZ
+    const configTimezone = this.config.timezone;
+    if (configTimezone) {
+      ptyEnv['CTX_TIMEZONE'] = configTimezone;
+      ptyEnv['TZ'] = configTimezone; // also set TZ so date/time system calls use correct zone
+    } else if (process.env.TZ) {
+      ptyEnv['CTX_TIMEZONE'] = process.env.TZ;
+    }
     // CTX_ORCHESTRATOR_AGENT: read from org context.json so agents can route to orchestrator
     if (this.env.projectRoot && this.env.org) {
       try {

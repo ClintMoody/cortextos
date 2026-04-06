@@ -101,15 +101,22 @@ export class AgentManager {
       chatId = chatIdMatch?.[1]?.trim();
       allowedUserId = allowedUserMatch?.[1]?.trim() || undefined;
 
+      // Validate BOT_TOKEN format: must be numeric_id:alphanumeric_secret
+      if (botToken && !/^\d+:[A-Za-z0-9_-]+$/.test(botToken)) {
+        log(`WARNING: BOT_TOKEN format invalid (expected: 123456:ABC...). Telegram will not start.`);
+        botToken = undefined;
+      }
+
       // ALLOWED_USER must be a numeric Telegram user ID, not a username
       if (allowedUserId && !/^\d+$/.test(allowedUserId)) {
-        log(`WARNING: ALLOWED_USER="${allowedUserId}" is not a numeric ID. Telegram user IDs are numbers (e.g. 123456789). Messages will be blocked. Fix the .env file.`);
+        log(`WARNING: ALLOWED_USER is not a numeric ID. Telegram user IDs are numbers (e.g. 123456789). Messages will be blocked. Fix the .env file.`);
         allowedUserId = undefined; // Disable the gate rather than silently block all messages
       }
 
       if (botToken && chatId) {
         telegramApi = new TelegramAPI(botToken);
-        log(`Telegram configured (chat_id: ${chatId}${allowedUserId ? `, allowed_user: ${allowedUserId}` : ''})`);
+        // Don't log sensitive user IDs — just indicate whether the gate is enabled
+        log(`Telegram configured (chat_id: ****${String(chatId).slice(-4)}${allowedUserId ? ', allowed_user: enabled' : ''})`);
       }
     }
 
@@ -143,10 +150,12 @@ export class AgentManager {
       const poller = new TelegramPoller(telegramApi, stateDir);
 
       poller.onMessage((msg) => {
-        // ALLOWED_USER gate: if configured, ignore messages from other users
-        if (allowedUserId && msg.from?.id !== undefined) {
-          if (String(msg.from.id) !== allowedUserId) {
-            log(`Ignoring message from unauthorized user ${msg.from.id} (allowed: ${allowedUserId})`);
+        // ALLOWED_USER gate: if configured, ignore messages from other users.
+        // Use numeric comparison to avoid string coercion issues.
+        if (allowedUserId) {
+          const allowedId = parseInt(allowedUserId, 10);
+          if (msg.from?.id !== allowedId) {
+            log(`Ignoring message from unauthorized user (allowed_user gate)`);
             return;
           }
         }

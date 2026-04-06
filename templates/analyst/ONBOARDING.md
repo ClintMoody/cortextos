@@ -142,28 +142,66 @@ echo "$EXISTING" | jq \
 
 ## Part 2c: HEARTBEAT.md Configuration
 
-### Step 10: Configure HEARTBEAT.md
+### Step 10: Configure heartbeat
 
-Use defaults for staleness thresholds (goals: 7 days, tasks: 3 days) and guardrail self-check (enabled). Write these to HEARTBEAT.md now.
+My heartbeat cron runs every 4 hours and includes a system health check (Step 3 — checks all agent heartbeats). Confirm with the user:
 
-> "I've set up my heartbeat cycle with default thresholds - goals flagged after 7 days without update, tasks after 3 days. Guardrail self-check enabled. You can tune these anytime by telling me to update my config."
+> "My heartbeat runs every 4 hours and checks all agent health on each cycle. I flag agents silent for more than 5 hours and alert the orchestrator if something is unresponsive for 8+ hours. Does that cadence work for you?"
 
-If the user objects, adjust. Otherwise move on.
-
-### Step 11: Check for knowledge base
-
+If the user wants more frequent monitoring (e.g., every 2 hours), update the heartbeat interval in `config.json`:
 ```bash
-[ -f "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" ] && \
-  grep -q GEMINI_API_KEY "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" && \
-  echo "KB enabled" || echo "no KB"
+# Update heartbeat cron to every 2 hours if user requests it
+# Edit config.json crons[0].interval from "4h" to "2h"
 ```
 
-If KB is enabled:
-> "Your org has a semantic knowledge base. I can ingest monitoring runbooks, incident history, or any reference docs you want me to search. Send me any files or docs now, or any time later."
+Otherwise, confirm defaults and move on.
 
-Offer to ingest any monitoring docs the user mentions:
+### Step 10b: Migration check
+
+> "Are you setting me up from scratch, or am I picking up from an existing analyst agent or workspace? If you have an existing setup, I can import their memory, runbooks, and knowledge base content."
+
+**END YOUR TURN.** If migrating, copy MEMORY.md, memory/ files, and custom skills from the old directory. Note what was imported.
+
+### Step 11: Knowledge Base Setup (REQUIRED)
+
 ```bash
-cortextos bus kb-ingest <path> --org $CTX_ORG --scope shared
+KB_STATUS=$([ -f "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" ] && \
+  grep -q "^GEMINI_API_KEY=." "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" && \
+  echo "enabled" || echo "not configured")
+echo "Knowledge Base: $KB_STATUS"
+```
+
+**If NOT configured:**
+> "The knowledge base is a critical dependency for my analytics and monitoring work — I use it to correlate past incidents, search runbooks, and build up a historical memory of system behavior.
+>
+> To enable: add GEMINI_API_KEY to orgs/${CTX_ORG}/secrets.env (free key at https://aistudio.google.com/app/apikey). Recommend setting this up before going live."
+
+**If KB is enabled:**
+> "Knowledge base is ready. What should I keep searchable? For example:
+> - Monitoring runbooks and incident history
+> - Performance baselines and anomaly notes
+> - Any reference docs relevant to your system"
+
+Ask: > "Which files or docs should I automatically ingest for monitoring context? And are there any I should never touch (private, sensitive, too large)?"
+
+**END YOUR TURN.** Wait for answers.
+
+Based on their answers, write rules to `.claude/skills/memory/SKILL.md`:
+```markdown
+## Knowledge Base Ingestion Rules (set during onboarding)
+
+### Auto-ingest for monitoring context:
+- <list from user>
+
+### Never ingest:
+- <list from user>
+```
+
+Initial ingestion:
+```bash
+cortextos bus kb-ingest "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/knowledge.md" \
+  --org $CTX_ORG --scope shared
+# Add any specific docs the user listed
 ```
 
 ## Part 3: Workflows and Crons

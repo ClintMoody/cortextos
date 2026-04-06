@@ -173,7 +173,7 @@ describe('FastChecker', () => {
       );
 
       expect(result).toContain('[Your last message: "My previous reply to you"]');
-      expect(result).toContain('=== TELEGRAM from alice (chat_id:999) ===');
+      expect(result).toContain('=== TELEGRAM from [USER: alice] (chat_id:999) ===');
       expect(result).toContain('Hello there');
       expect(result).toContain('cortextos bus send-telegram 999');
     });
@@ -187,7 +187,7 @@ describe('FastChecker', () => {
       );
 
       expect(result).not.toContain('[Your last message');
-      expect(result).toContain('=== TELEGRAM from bob (chat_id:123) ===');
+      expect(result).toContain('=== TELEGRAM from [USER: bob] (chat_id:123) ===');
       expect(result).toContain('Hi');
     });
 

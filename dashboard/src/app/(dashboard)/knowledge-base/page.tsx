@@ -1,11 +1,7 @@
-import { getOrgs } from '@/lib/config';
+import { getOrgs, getFrameworkRoot } from '@/lib/config';
 import { KnowledgeBaseClient } from '@/components/knowledge-base/kb-client';
 import fs from 'fs';
 import path from 'path';
-
-function getFrameworkRoot(): string {
-  return process.env.CTX_FRAMEWORK_ROOT || process.cwd().replace('/dashboard', '');
-}
 
 function getKnowledgeContent(org: string): string {
   const frameworkRoot = getFrameworkRoot();

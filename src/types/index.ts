@@ -80,6 +80,7 @@ export interface Event {
 export interface Heartbeat {
   agent: string;
   org: string;
+  display_name?: string; // user-configured name from IDENTITY.md (e.g. "Sentinel2", "Donna")
   status: string;
   current_task: string;
   mode: 'day' | 'night';
@@ -343,6 +344,7 @@ export interface IPCResponse {
 export interface AgentInfo {
   name: string;
   org: string;
+  display_name?: string;  // user-configured name from IDENTITY.md (e.g. "Boss", "Donna")
   role: string;
   enabled: boolean;
   running: boolean;

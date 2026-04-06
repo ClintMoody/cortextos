@@ -55,39 +55,53 @@ export function CostTracking({
   const modelKeys = Object.keys(MODEL_COLORS); // opus, sonnet, haiku
   const modelColorValues = modelKeys.map((k) => MODEL_COLORS[k]);
 
+  const hasPlanData = !!planUsage || (usageHistory && usageHistory.length > 0);
+
   return (
     <div className="space-y-6">
-      {/* Plan Usage */}
-      {planUsage && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Plan Usage
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <UsageBar
-              pct={planUsage.session.used_pct}
-              label="Current Session"
-              sublabel={planUsage.session.resets ? `Resets ${planUsage.session.resets}` : undefined}
-            />
-            <UsageBar
-              pct={planUsage.week_all_models.used_pct}
-              label="Weekly (All Models)"
-              sublabel={planUsage.week_all_models.resets ? `Resets ${planUsage.week_all_models.resets}` : undefined}
-            />
-            <UsageBar
-              pct={planUsage.week_sonnet.used_pct}
-              label="Weekly (Sonnet Only)"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Last scraped: {new Date(planUsage.timestamp).toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Plan Usage — primary metric, always shown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Max Plan Usage
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {planUsage ? (
+            <div className="space-y-4">
+              <UsageBar
+                pct={planUsage.week_all_models.used_pct}
+                label="Weekly (All Models)"
+                sublabel={planUsage.week_all_models.resets ? `Resets ${planUsage.week_all_models.resets}` : undefined}
+              />
+              <UsageBar
+                pct={planUsage.session.used_pct}
+                label="Current Session"
+                sublabel={planUsage.session.resets ? `Resets ${planUsage.session.resets}` : undefined}
+              />
+              <UsageBar
+                pct={planUsage.week_sonnet.used_pct}
+                label="Weekly (Sonnet Only)"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Last updated: {new Date(planUsage.timestamp).toLocaleString()}
+              </p>
+            </div>
+          ) : (
+            <div className="py-6 text-center space-y-2">
+              <p className="text-sm font-medium">Plan usage tracking not configured</p>
+              <p className="text-xs text-muted-foreground">
+                Run the usage scraper to see your Claude Max plan usage here.
+              </p>
+              <code className="text-xs bg-muted px-2 py-1 rounded block w-fit mx-auto mt-2">
+                cortextos bus scrape-usage
+              </code>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Usage History Chart (for Max plan users) */}
+      {/* Usage History Chart */}
       {usageHistory && usageHistory.length >= 2 ? (
         <Card>
           <CardHeader>
@@ -120,7 +134,7 @@ export function CostTracking({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Usage Right Now
+              Usage Snapshot
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -134,12 +148,14 @@ export function CostTracking({
                 <p className="text-xs text-muted-foreground mt-1">Current Session</p>
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground text-center">Chart will appear after next scrape</p>
+            <p className="text-[10px] text-muted-foreground text-center">Chart will appear after the next scrape</p>
           </CardContent>
         </Card>
-      ) : (
+      ) : null}
+
+      {/* API Cost Tracking (secondary — for users on pay-per-token) */}
+      {!hasPlanData && dailyCosts.length > 0 && (
         <>
-          {/* Month-to-date cost summary */}
           {currentMonthCost > 0 && (
             <div className="grid grid-cols-2 gap-3">
               <Card>
@@ -156,44 +172,30 @@ export function CostTracking({
               </Card>
             </div>
           )}
-
-          {/* Fallback: Daily cost chart (for API users) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Daily Cost
+                Daily API Cost
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {dailyCosts.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">
-                  No cost data available yet.
-                </p>
-              ) : (
-                <AreaChart
-                  data={dailyCosts}
-                  xKey="date"
-                  yKeys={['cost']}
-                  colors={[CHART_GOLD]}
-                  height={200}
-                />
-              )}
+              <AreaChart
+                data={dailyCosts}
+                xKey="date"
+                yKeys={['cost']}
+                colors={[CHART_GOLD]}
+                height={200}
+              />
             </CardContent>
           </Card>
-
-          {/* By model stacked bar */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Cost by Model
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dailyCostByModel.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">
-                  No model-level cost data yet.
-                </p>
-              ) : (
+          {dailyCostByModel.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                  Cost by Model
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
                 <BarChart
                   data={dailyCostByModel}
                   xKey="date"
@@ -203,9 +205,9 @@ export function CostTracking({
                   showLegend
                   height={200}
                 />
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

@@ -12,7 +12,7 @@ export function updateHeartbeat(
   paths: BusPaths,
   agentName: string,
   status: string,
-  options?: { org?: string; timezone?: string; loopInterval?: string; currentTask?: string },
+  options?: { org?: string; timezone?: string; loopInterval?: string; currentTask?: string; displayName?: string },
 ): void {
   ensureDir(paths.stateDir);
 
@@ -22,6 +22,7 @@ export function updateHeartbeat(
   const heartbeat: Heartbeat = {
     agent: agentName,
     org: options?.org ?? '',
+    ...(options?.displayName ? { display_name: options.displayName } : {}),
     status,
     current_task: options?.currentTask ?? '',
     mode,

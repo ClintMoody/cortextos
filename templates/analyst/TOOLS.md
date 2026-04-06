@@ -46,6 +46,8 @@ Agent secrets: `orgs/{org}/agents/{agent}/.env`
 | Command | What it does |
 |---|---|
 | `send-telegram <chat_id> "<msg>"` | Message the user |
+| `send-telegram <chat_id> "<caption>" --image <path>` | Send a photo |
+| `send-telegram <chat_id> "<caption>" --file <path>` | Send any file (PDF, txt, etc.) |
 | `edit-message <chat_id> <msg_id> "<text>"` | Edit an existing message |
 | `answer-callback <query_id> [toast]` | Dismiss button loading state |
 | `post-activity "<msg>"` | Post to org activity channel |

@@ -26,7 +26,30 @@ cortextos bus ack-inbox "<message_id>"
 Un-ACK'd messages are re-delivered in 5 minutes. Do not ignore them.
 Target: 0 un-ACK'd messages after this step.
 
-## Step 3: Check task queue + stale task detection
+## Step 3: System health check (ANALYST — do this before your own tasks)
+
+Full reference: `.claude/skills/agent-management/SKILL.md`
+
+```bash
+# Check all agent heartbeats — flag any silent for >5 hours
+cortextos bus read-all-heartbeats
+
+# Check for agents with no recent activity
+cortextos bus list-tasks --status in_progress 2>/dev/null | head -20
+```
+
+For each agent: if heartbeat is older than 5 hours, send a message to that agent:
+```bash
+cortextos bus send-message <agent_name> normal "Heartbeat check: are you running? Last heartbeat was more than 5 hours ago."
+```
+
+If an agent is unresponsive for >8 hours, notify the orchestrator and log the issue:
+```bash
+cortextos bus send-message $CTX_ORCHESTRATOR_AGENT normal "Agent <name> appears unresponsive — last heartbeat >8h ago. May need restart."
+cortextos bus log-event action agent_unresponsive warning --meta '{"agent":"<name>","hours_silent":8}'
+```
+
+## Step 3b: Check own task queue + stale task detection
 
 ```bash
 cortextos bus list-tasks --agent $CTX_AGENT_NAME --status pending
@@ -35,7 +58,7 @@ cortextos bus list-tasks --agent $CTX_AGENT_NAME --status in_progress
 
 - If you have pending tasks: pick the highest priority one
 - If you have in_progress tasks older than 2 hours: either complete them NOW or update their status with a note
-- If you have NO tasks: check GOALS.md for objectives, then check with orchestrator
+- If you have NO tasks: check GOALS.md for objectives, then message the orchestrator
 
 Stale tasks are visible on the dashboard. They make you look broken.
 
@@ -49,11 +72,12 @@ cortextos bus log-event heartbeat agent_heartbeat info --meta '{"agent":"'$CTX_A
 
 ```bash
 TODAY=$(date -u +%Y-%m-%d)
+LOCAL_TIME=$(date +'%-I:%M %p %Z' 2>/dev/null || date)
 MEMORY_DIR="$(pwd)/memory"
 mkdir -p "$MEMORY_DIR"
 cat >> "$MEMORY_DIR/$TODAY.md" << MEMORY
 
-## Heartbeat Update - $(date -u +%H:%M)
+## Heartbeat Update - $(date -u +%H:%M UTC) / $LOCAL_TIME
 - WORKING ON: <task_id or "none">
 - Status: <healthy/working/blocked>
 - Inbox: <N messages processed>

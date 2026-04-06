@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { spawnSync } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { sendMessage, checkInbox, ackInbox } from '../bus/message.js';
 import { validateAgentName } from '../utils/validate.js';
@@ -221,11 +222,49 @@ busCommand
   .action((status: string, opts: { task?: string; timezone?: string; interval?: string }) => {
     const env = resolveEnv();
     const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+
+    // Read display name from IDENTITY.md so agents self-report their user-facing name
+    let displayName: string | undefined;
+    const frameworkRoot = process.env.CTX_FRAMEWORK_ROOT || process.env.CTX_PROJECT_ROOT || '';
+    if (frameworkRoot) {
+      const identityPaths = [
+        join(frameworkRoot, 'orgs', env.org, 'agents', env.agentName, 'IDENTITY.md'),
+        join(frameworkRoot, 'agents', env.agentName, 'IDENTITY.md'),
+      ];
+      for (const idPath of identityPaths) {
+        if (existsSync(idPath)) {
+          try {
+            const lines = readFileSync(idPath, 'utf-8').split('\n');
+            // "## Name" section takes priority (user-configured display name)
+            const nameIdx = lines.findIndex(l => l.trim() === '## Name');
+            if (nameIdx >= 0) {
+              for (let i = nameIdx + 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line || line.startsWith('<!--')) continue;
+                if (line.startsWith('#')) break;
+                displayName = line;
+                break;
+              }
+            }
+            // Fallback: first non-empty, non-comment top-level heading value
+            if (!displayName) {
+              const h1 = lines.find(l => l.startsWith('# ') && !l.startsWith('## '));
+              if (h1) displayName = h1.replace(/^#\s+/, '').trim();
+            }
+          } catch {
+            // Skip
+          }
+          break;
+        }
+      }
+    }
+
     updateHeartbeat(paths, env.agentName, status, {
       org: env.org,
       timezone: opts.timezone,
       loopInterval: opts.interval,
       currentTask: opts.task,
+      displayName,
     });
     console.log(`Heartbeat updated: ${env.agentName}`);
   });
@@ -252,7 +291,8 @@ busCommand
     for (const hb of heartbeats) {
       const stale = new Date(hb.last_heartbeat) < new Date(Date.now() - 2 * 60 * 60 * 1000);
       const staleFlag = stale ? ' [STALE]' : '';
-      console.log(`${hb.agent} (${hb.org}) — ${hb.status}${staleFlag} — last seen ${hb.last_heartbeat}`);
+      const label = hb.display_name ? `${hb.display_name} (${hb.agent})` : hb.agent;
+      console.log(`${label} (${hb.org}) — ${hb.status}${staleFlag} — last seen ${hb.last_heartbeat}`);
       if (hb.current_task) console.log(`  task: ${hb.current_task}`);
     }
   });
@@ -627,7 +667,8 @@ busCommand
   .argument('<chat-id>', 'Telegram chat ID')
   .argument('<message>', 'Message text (supports Telegram Markdown)')
   .option('--image <path>', 'Send a photo with caption')
-  .action(async (chatId: string, message: string, opts: { image?: string }) => {
+  .option('--file <path>', 'Send a document/file with caption (any file type)')
+  .action(async (chatId: string, message: string, opts: { image?: string; file?: string }) => {
     // Resolve bot token: agent .env first, then process.env
     const env = resolveEnv();
     let botToken = '';
@@ -659,6 +700,9 @@ busCommand
       let sentMessageId = 0;
       if (opts.image) {
         const result = await api.sendPhoto(chatId, opts.image, message);
+        sentMessageId = result?.result?.message_id ?? 0;
+      } else if (opts.file) {
+        const result = await api.sendDocument(chatId, opts.file, message);
         sentMessageId = result?.result?.message_id ?? 0;
       } else {
         const result = await api.sendMessage(chatId, message);

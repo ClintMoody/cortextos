@@ -112,6 +112,53 @@ export class TelegramAPI {
   }
 
   /**
+   * Send a document (file) with optional caption. Works for any file type
+   * that isn't a photo: PDFs, text files, archives, etc.
+   */
+  async sendDocument(
+    chatId: string | number,
+    filePath: string,
+    caption?: string,
+    replyMarkup?: object,
+  ): Promise<any> {
+    if (!existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    await this.rateLimit(String(chatId));
+
+    const fileData = readFileSync(filePath);
+    const fileName = basename(filePath);
+
+    const formData = new FormData();
+    formData.append('chat_id', String(chatId));
+    formData.append('document', new Blob([fileData]), fileName);
+    if (caption) {
+      formData.append('caption', caption);
+    }
+    if (replyMarkup) {
+      formData.append('reply_markup', JSON.stringify(replyMarkup));
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/sendDocument`, {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await response.json() as any;
+      if (!result.ok) {
+        throw new Error(`Telegram API error: ${result.description || 'Unknown error'}`);
+      }
+      return result;
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Telegram API error')) {
+        throw err;
+      }
+      throw new Error(`Telegram API request failed: ${err}`);
+    }
+  }
+
+  /**
    * Get updates via long polling.
    */
   async getUpdates(offset: number, timeout: number = 1): Promise<any> {

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, existsSync, statSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { createHash } from 'crypto';
 import type { InboxMessage, BusPaths, TelegramMessage, TelegramCallbackQuery } from '../types/index.js';
 import { checkInbox, ackInbox } from '../bus/message.js';
 import { AgentProcess } from './agent-process.js';
@@ -196,7 +197,8 @@ Reply using: cortextos bus send-message ${msg.from} normal '<your reply>' ${msg.
       lastSentCtx = `[Your last message: "${lastSentText.slice(0, 500)}"]\n`;
     }
 
-    return `=== TELEGRAM from ${from} (chat_id:${chatId}) ===
+    // Use [USER: ...] wrapper to prevent prompt injection via crafted display names
+    return `=== TELEGRAM from [USER: ${from}] (chat_id:${chatId}) ===
 ${replyCx}\`\`\`
 ${text}
 \`\`\`
@@ -654,16 +656,10 @@ Reply using: cortextos bus send-telegram ${chatId} "<your reply>"
   }
 
   /**
-   * Compute a simple hash for message dedup.
+   * Compute a hash for message dedup. Uses SHA-256 to avoid collision attacks.
    */
   private hashMessage(text: string): string {
-    // Simple djb2 hash - fast and good enough for dedup
-    let hash = 5381;
-    for (let i = 0; i < text.length; i++) {
-      hash = ((hash << 5) + hash) + text.charCodeAt(i);
-      hash = hash & hash; // Convert to 32-bit int
-    }
-    return Math.abs(hash).toString(36);
+    return createHash('sha256').update(text).digest('hex');
   }
 
   /**

@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, cpSync, rmSync } from 'fs';
 import { join, resolve, relative } from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { ensureDir } from '../utils/atomic.js';
 
 // --- Types ---
@@ -503,10 +503,10 @@ export function submitCommunityItem(
 
       // Create and switch to contribution branch (from current HEAD)
       try {
-        execSync(`git checkout -b ${branch}`, { ...execOpts, stdio: 'pipe' });
+        execFileSync('git', ['checkout', '-b', branch], { ...execOpts, stdio: 'pipe' });
       } catch {
         // Branch may already exist — switch to it
-        execSync(`git checkout ${branch}`, { ...execOpts, stdio: 'pipe' });
+        execFileSync('git', ['checkout', branch], { ...execOpts, stdio: 'pipe' });
       }
 
       // Stage the new community files and updated catalog
@@ -514,10 +514,10 @@ export function submitCommunityItem(
 
       // Commit
       const commitMsg = `community: add ${itemType} ${itemName}\n\n${description}\n\nSubmitted-by: ${author}`;
-      execSync(`git commit -m ${JSON.stringify(commitMsg)}`, { ...execOpts, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', commitMsg], { ...execOpts, stdio: 'pipe' });
 
       // Push to origin
-      execSync(`git push origin ${branch}`, { ...execOpts, stdio: 'pipe' });
+      execFileSync('git', ['push', 'origin', branch], { ...execOpts, stdio: 'pipe' });
 
       // Extract upstream repo (owner/repo) from upstream remote URL
       const upstreamRepo = extractRepoPath(upstreamUrl);

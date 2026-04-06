@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { existsSync, readFileSync, statSync, appendFileSync, writeFileSync } from 'fs';
 import { join, extname } from 'path';
 import { readdirSync } from 'fs';
@@ -198,7 +198,7 @@ export function autoCommit(projectDir: string, dryRun: boolean = false): AutoCom
   // Stage safe files
   for (const file of staged) {
     try {
-      execSync(`git add "${file}"`, { cwd: projectDir, stdio: 'pipe' });
+      execFileSync('git', ['add', file], { cwd: projectDir, stdio: 'pipe' });
     } catch {
       // Ignore individual add failures
     }

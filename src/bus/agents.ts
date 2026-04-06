@@ -129,8 +129,9 @@ function buildAgentInfo(
     }
   }
 
-  // Get role from IDENTITY.md
+  // Get display name and role from IDENTITY.md
   let role = '';
+  let displayName: string | undefined;
   const frameworkRoot = process.env.CTX_FRAMEWORK_ROOT || process.env.CTX_PROJECT_ROOT || '';
   if (frameworkRoot) {
     const identityPaths = [
@@ -142,6 +143,19 @@ function buildAgentInfo(
         try {
           const content = readFileSync(idPath, 'utf-8');
           const lines = content.split('\n');
+
+          // Parse "## Name" — user-configured display name (e.g. "Boss", "Donna")
+          const nameIdx = lines.findIndex(l => l.trim() === '## Name');
+          if (nameIdx >= 0) {
+            for (let i = nameIdx + 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line || line.startsWith('<!--')) continue;
+              if (line.startsWith('##')) break;
+              displayName = line;
+              break;
+            }
+          }
+
           // Find "## Role" then take the first non-empty, non-comment line after it
           const roleIdx = lines.findIndex(l => l.startsWith('## Role'));
           if (roleIdx >= 0) {
@@ -194,6 +208,7 @@ function buildAgentInfo(
   return {
     name,
     org,
+    display_name: displayName,
     role,
     enabled,
     running,

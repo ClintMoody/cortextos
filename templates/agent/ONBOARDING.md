@@ -145,23 +145,99 @@ Before moving on, explain how approvals work - this is critical for any agent ta
     - **Custom rules from user:** <their additions>
     ```
 
-## Part 2c: HEARTBEAT.md and Knowledge Base Setup
+## Part 2b.5: Migration from Previous Agent or Workspace
+
+Before moving on to knowledge base setup, check if the user is migrating from an existing agent or workspace:
+
+11b. **Ask about migration:**
+    > "Are you setting me up from scratch, or am I replacing or extending an existing agent?
+    >
+    > If you have an existing agent or workspace to migrate from, I can:
+    > - Import their memory files and context (MEMORY.md, daily memory)
+    > - Copy existing skills and workflows
+    > - Ingest their knowledge base if they have one
+    >
+    > Do you have an existing agent directory to migrate from?"
+
+    **END YOUR TURN.** If the user says no migration, skip to step 12. If yes, continue below.
+
+    If migrating from an existing agent:
+    - Ask for the path to the old agent directory
+    - Copy their MEMORY.md: `cp <old_dir>/MEMORY.md ${CTX_AGENT_DIR}/MEMORY.md`
+    - Copy any daily memory files: `cp <old_dir>/memory/*.md ${CTX_AGENT_DIR}/memory/`
+    - Copy any custom skills: for each skill in `<old_dir>/.claude/skills/`, offer to copy it
+    - If they had a knowledge base, re-ingest the key files
+    - Note what was migrated in today's memory file
+
+    If migrating from a different workspace (not another cortextOS agent):
+    - Ask for the key context files (README, docs, previous instructions)
+    - Read and summarize them, saving key facts to MEMORY.md
+    - Offer to ingest docs into the KB
+
+## Part 2c: Knowledge Base Setup
 
 After workflows and tools are configured:
 
-12. **Customize HEARTBEAT.md:**
-    > "One quick config question. How long before a task with no updates gets flagged as stale? (default: 3 days - keeps the dashboard clean)"
+12. **Confirm heartbeat cadence:**
+    > "My heartbeat runs every 4 hours and flags in-progress tasks with no updates after 2 hours. Does that work, or do you want a longer window for your type of work?"
 
-    Update the stale task threshold in HEARTBEAT.md Step 3.
+    If the user wants a different heartbeat interval, update `config.json` crons array (heartbeat entry interval).
+    If they want a different stale task window (default 2h), note it in MEMORY.md — the agent applies it judgmentally during HEARTBEAT.md Step 3.
 
-13. **Check for knowledge base:**
+13. **Knowledge base setup — ALWAYS DO THIS STEP:**
+
+    First check if KB is available:
     ```bash
-    [ -f "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" ] && grep -q GEMINI_API_KEY "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" && echo "KB enabled" || echo "no KB"
+    [ -f "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" ] && grep -q "^GEMINI_API_KEY=." "${CTX_FRAMEWORK_ROOT}/orgs/${CTX_ORG}/secrets.env" && echo "KB enabled" || echo "no KB"
     ```
-    If KB is enabled:
-    > "Your org has a semantic knowledge base I can query. Any domain-specific docs, reference material, or style guides I should have access to? Send me a file path or URL and I'll ingest it."
 
-    Ingest any provided docs: `cortextos bus kb-ingest <path> --org $CTX_ORG --scope private --agent $CTX_AGENT_NAME`
+    **If KB is NOT enabled:**
+    > "Your org doesn't have a Gemini API key set up yet. The knowledge base (semantic search + RAG) is one of the most powerful features — it lets me remember context across sessions, search your docs by meaning, and share knowledge with other agents.
+    >
+    > It's free to set up. Go to https://aistudio.google.com/app/apikey and get a free API key, then add it to orgs/${CTX_ORG}/secrets.env as GEMINI_API_KEY=<your_key>. I'll wait here and continue once it's set up, or you can skip for now and add it later."
+
+    **If KB IS enabled:**
+    > "Your org has a semantic knowledge base. Before I start working, I want to set up my ingestion rules — this determines what I automatically keep track of and how I build my long-term memory.
+    >
+    > Let me ask you a few questions:"
+
+    Ask all of the following, sequentially:
+
+    (a) > "What files or directories should I automatically ingest whenever I create or update them? For example: my daily memory files, key reference docs, output reports."
+
+    (b) > "Are there any files I should never ingest — things that are private, sensitive, or too large?"
+
+    (c) > "What topics or concepts are most important to your work that I should be able to search for?"
+
+    **END YOUR TURN.** Wait for the user's answers.
+
+    Based on their answers, write memory management rules to `.claude/skills/memory/SKILL.md` or a new `.claude/skills/memory-management/SKILL.md`:
+    ```markdown
+    ## Auto-Ingestion Rules (from onboarding)
+
+    Always ingest on create/update:
+    - <list from answer (a)>
+
+    Never ingest:
+    - <list from answer (b)>
+
+    Key topics to keep searchable:
+    - <list from answer (c)>
+    ```
+
+    Then set up the initial ingestion:
+    ```bash
+    # Ingest existing memory and key docs
+    cortextos bus kb-ingest \
+      "$CTX_AGENT_DIR/MEMORY.md" \
+      "$CTX_AGENT_DIR/GOALS.md" \
+      "$CTX_AGENT_DIR/IDENTITY.md" \
+      --org $CTX_ORG --scope private \
+      --agent $CTX_AGENT_NAME \
+      --collection "memory-$CTX_AGENT_NAME" --force
+    ```
+
+    Ingest any additional files the user specified in their answers.
 
 ## Part 3: Context Import
 
