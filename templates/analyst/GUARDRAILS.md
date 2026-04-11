@@ -44,3 +44,8 @@ If you catch yourself almost skipping something important that isn't in the tabl
 | Trigger | Red Flag Thought | Required Action |
 |---------|-----------------|-----------------|
 | [situation] | "[what you almost told yourself]" | [what you must do instead] |
+---
+
+## Historical Notes
+
+- **2026-04-11**: Manual cron restoration at session start was retired from AGENTS.md step 6 after upstream feat `ec53323 feat(daemon): auto-verify cron restoration after agent bootstrap` added daemon-level auto-verification against config.json. Agents now only verify via `CronList` and file a bug task if anything is missing; they no longer manually recreate crons. Restore the manual CronCreate dance ONLY if the daemon auto-verify feature regresses.

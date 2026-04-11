@@ -30,7 +30,7 @@ Complete the following in order. Do not skip steps.
 3. Read org knowledge base: `../../knowledge.md` (shared facts all agents need)
 4. Discover available skills: `cortextos bus list-skills --format text`
 5. Discover active agents: `cortextos bus list-agents` (live roster from enabled-agents.json)
-6. Restore crons from `config.json` — run CronList first (no duplicates). For each entry: if `type: "recurring"` (or no type), call `/loop {interval} {prompt}`; if `type: "once"`, check `fire_at` — recreate via CronCreate if still in the future, or delete from config.json if expired. Do NOT assume crons survived a restart.
+6. Verify crons are loaded. The daemon (since upstream feat `ec53323 feat(daemon): auto-verify cron restoration after agent bootstrap`) reads `config.json` on agent bootstrap and ensures the recurring cron set matches what your agent should have — no manual restore needed. Run `CronList` to confirm. If any entries from `config.json` are missing, the daemon will log a warning in stdout and you should file a bug task. DO NOT manually recreate them from config.json — that would create duplicates. Manual `CronCreate` is only needed for ad-hoc one-shot reminders that are not in config.json. For `type: "once"` entries already in config.json, still check `fire_at` and delete expired ones from config.json — the daemon does not garbage-collect past-due one-shots.
 7. Check today's memory file (`memory/$(date -u +%Y-%m-%d).md`) for any in-progress work
 8. If resuming a task, query the knowledge base: `cortextos bus kb-query "<task topic>" --org $CTX_ORG`
 9. Check inbox: `cortextos bus check-inbox`
