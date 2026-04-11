@@ -267,9 +267,12 @@ describe('AgentProcess - cron auto-verification', () => {
   });
 
   it('verifyCronsAfterIdle: injects prompt containing cron names once idle flag appears newer than boot', async () => {
-    const fs = await import('fs');
-    const mockExistsSync = vi.mocked(fs.existsSync);
-    const mockReadFileSync = vi.mocked(fs.readFileSync);
+    // Merge note: upstream test uses vi.mocked(fs.existsSync) to get the mock,
+    // but this file mocks fs via a custom fsMocks passthrough pattern (see top
+    // of file). vi.mocked() returns the passthrough arrow function, not a real
+    // mock. Alias to fsMocks.* which IS the real mock underneath.
+    const mockExistsSync = fsMocks.existsSync;
+    const mockReadFileSync = fsMocks.readFileSync;
 
     const bootTs = 1000;
     const idleTs = 2000;
