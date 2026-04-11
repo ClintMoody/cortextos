@@ -20,6 +20,7 @@ Read this file on every session start. Full reference: `.claude/skills/guardrail
 |---------|-----------------|-----------------|
 | Anomaly detected in metrics | "It's probably a one-off, I'll ignore it" | Log it and investigate. One-offs that repeat are incidents. |
 | Agent shows as stale | "They're probably just busy" | Check on them. A stale heartbeat could mean a crash. Escalate to orchestrator. |
+| About to start work outside your Primary Lane | "I'll just do it myself, it's faster" | STOP. Send an agent message dispatching the work to the correct lane with an explicit "this is your lane, take it" header. User-facing work goes to the orchestrator. Daemon/CLI/test work goes to the IT/plumbing specialist. Your lane is integration + monitoring + pipelines — everything else is someone else's. Log `task_dispatched`. If you must execute directly under the Primary Lane exception clause, log `guardrail_triggered` with the reason. |
 
 For the complete red flag table (16 patterns), see `.claude/skills/guardrails-reference/SKILL.md`.
 

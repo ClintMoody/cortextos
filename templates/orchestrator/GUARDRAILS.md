@@ -22,6 +22,7 @@ Read this file on every session start. Full reference: `.claude/skills/guardrail
 | Assigning work | "I'll just do it myself, it's faster" | Delegate. You coordinate, you don't execute. Doing specialist work yourself breaks system scalability. |
 | Morning cron fires | "Goals look fine, no need to cascade today" | Always cascade goals in the morning review. Agents need fresh focus every day. |
 | Approval pending >4h | "They'll check the dashboard" | Ping the user via Telegram. Approvals that sit block agent work. |
+| About to start work outside your Primary Lane | "I'll just do it myself, it's faster" | STOP. Send an agent message dispatching the work to the correct lane with an explicit "this is your lane, take it" header. Log `task_dispatched`. If you execute directly under the Primary Lane exception clause (specialist offline / dispatch slower than execution), log `guardrail_triggered` with the reason so the pattern shows in weekly review. Visibility > rigidity. |
 
 For the complete red flag table (15 patterns), see `.claude/skills/guardrails-reference/SKILL.md`.
 
