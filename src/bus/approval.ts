@@ -25,18 +25,29 @@ function buildApprovalKeyboard(approvalId: string): object {
 /**
  * Post a newly-created approval to the org's activity channel with
  * Approve/Deny inline buttons. Returns a promise that resolves once the
- * post attempt has settled (either succeeded or been caught-and-suppressed).
+ * post attempt has settled.
  *
- * Errors are suppressed so activity-channel failures do not block approval
- * creation — if the activity channel is unconfigured, unreachable, or the
- * post fails, approval creation still succeeds (the file-based state store
- * is the source of truth, and the dashboard UI path always works regardless).
+ * Path resolution: activity-channel.env lives under the FRAMEWORK root
+ * (frameworkRoot/orgs/<org>/activity-channel.env), NOT the runtime state
+ * dir (ctxRoot/orgs/<org>/). The earlier version of this helper used
+ * paths.ctxRoot to derive orgDir, which silently resolved to the wrong
+ * filesystem root and caused every activity-channel post to fail as
+ * "not configured" — a bug that hid for hours because of the silent
+ * .catch below. Fallback chain is now: explicit frameworkRoot arg →
+ * process.env.CTX_FRAMEWORK_ROOT → SKIP WITH WARN (no further fallback;
+ * the paths.ctxRoot fallback that caused the original bug was removed
+ * deliberately per post-incident review — silently using a known-wrong
+ * path is worse than skipping loudly).
+ *
+ * Errors from postActivity (thrown rejections) are suppressed so
+ * activity-channel unreachability does not block approval creation. The
+ * "not configured" signal (postActivity returns false) is now logged as
+ * a visible warn — preserves the best-effort behavior but surfaces
+ * misconfiguration immediately instead of debugging it silently.
  *
  * The returned promise MUST be awaited by the caller in short-lived
- * contexts (CLI action handlers, single-request RPC paths) or the process
- * may exit before the underlying fetch completes and the post silently
- * never sends. Fire-and-forget pattern only works in long-running
- * processes like the daemon or dashboard — it is unsafe for the CLI.
+ * contexts (CLI action handlers) or the process may exit before the
+ * underlying fetch completes and the post silently never sends.
  */
 function postApprovalToActivityChannel(
   paths: BusPaths,
@@ -45,9 +56,19 @@ function postApprovalToActivityChannel(
   title: string,
   category: ApprovalCategory,
   agentName: string,
-  context?: string,
+  context: string | undefined,
+  frameworkRoot: string | undefined,
 ): Promise<void> {
-  const orgDir = join(paths.ctxRoot, 'orgs', org);
+  const root = frameworkRoot ?? process.env.CTX_FRAMEWORK_ROOT;
+  if (!root) {
+    console.warn(
+      `[approval] No frameworkRoot available for ${approvalId} — skipping activity-channel post. ` +
+      `Set CTX_FRAMEWORK_ROOT env var or pass frameworkRoot explicitly.`,
+    );
+    return Promise.resolve();
+  }
+
+  const orgDir = join(root, 'orgs', org);
   const lines = [
     `🔔 Approval request: ${title}`,
     `Category: ${category}`,
@@ -60,8 +81,18 @@ function postApprovalToActivityChannel(
   const message = lines.join('\n');
 
   return postActivity(orgDir, paths.ctxRoot, org, message, buildApprovalKeyboard(approvalId))
-    .then(() => undefined)
-    .catch(() => undefined); // Best-effort — swallow errors, the approval itself already landed.
+    .then((posted) => {
+      if (!posted) {
+        // postActivity returns false when activity-channel.env is missing
+        // or cannot be parsed. Surface this visibly — the silent-false
+        // pattern is what hid tonight's path-resolution bug for hours.
+        console.warn(
+          `[approval] Activity-channel post failed for ${approvalId} — ` +
+          `check ${orgDir}/activity-channel.env (must define ACTIVITY_BOT_TOKEN + ACTIVITY_CHAT_ID).`,
+        );
+      }
+    })
+    .catch(() => undefined); // Thrown rejections still suppressed — activity-channel unreachable must not fail approval creation.
 }
 
 /**
@@ -71,8 +102,14 @@ function postApprovalToActivityChannel(
  * Returns a Promise that resolves to the approval id AFTER the
  * activity-channel fan-out has settled. Callers in short-lived contexts
  * (CLI action handlers) MUST await — otherwise the process may exit before
- * the Telegram post completes and the post silently never sends. See the
- * JSDoc on postApprovalToActivityChannel for the underlying rationale.
+ * the Telegram post completes and the post silently never sends.
+ *
+ * `frameworkRoot` (optional) is the filesystem root where
+ * orgs/<org>/activity-channel.env lives. Without it the activity-channel
+ * post is skipped with a warn — see postApprovalToActivityChannel for the
+ * fallback chain (explicit arg → CTX_FRAMEWORK_ROOT env → skip). CLI call
+ * sites should pass env.frameworkRoot explicitly; daemon-side callers
+ * may rely on the env var.
  */
 export async function createApproval(
   paths: BusPaths,
@@ -81,6 +118,7 @@ export async function createApproval(
   title: string,
   category: ApprovalCategory,
   context?: string,
+  frameworkRoot?: string,
 ): Promise<string> {
   validateApprovalCategory(category);
 
@@ -114,7 +152,7 @@ export async function createApproval(
   // unreachable must not block approval creation. Callbacks route back
   // via the orchestrator's activity-channel poller (see
   // daemon/agent-manager.ts).
-  await postApprovalToActivityChannel(paths, org, approvalId, title, category, agentName, context);
+  await postApprovalToActivityChannel(paths, org, approvalId, title, category, agentName, context, frameworkRoot);
 
   return approvalId;
 }
