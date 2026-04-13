@@ -46,8 +46,8 @@ afterEach(() => {
 });
 
 describe('createApproval', () => {
-  it('writes the approval JSON to pending/ and returns a stable id', () => {
-    const id = createApproval(paths, 'bob', 'TestOrg', 'Deploy to prod', 'deployment', 'why this matters');
+  it('writes the approval JSON to pending/ and returns a stable id', async () => {
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Deploy to prod', 'deployment', 'why this matters');
     expect(id).toMatch(/^approval_\d+_[a-zA-Z0-9]+$/);
 
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
@@ -61,8 +61,8 @@ describe('createApproval', () => {
     expect(approval.org).toBe('TestOrg');
   });
 
-  it('posts to the activity channel with Approve/Deny inline keyboard', () => {
-    const id = createApproval(paths, 'bob', 'TestOrg', 'Push to main', 'deployment', 'rationale');
+  it('posts to the activity channel with Approve/Deny inline keyboard', async () => {
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Push to main', 'deployment', 'rationale');
 
     expect(postActivitySpy).toHaveBeenCalledTimes(1);
     const [orgDir, ctxRoot, org, message, replyMarkup] = postActivitySpy.mock.calls[0] as [
@@ -94,27 +94,76 @@ describe('createApproval', () => {
     expect(String(rows[0][1].text)).toMatch(/Deny/);
   });
 
-  it('activity-channel post is fire-and-forget: approval creation succeeds even when postActivity rejects', () => {
+  it('activity-channel post failure is suppressed: approval creation succeeds even when postActivity rejects', async () => {
     postActivitySpy.mockRejectedValueOnce(new Error('activity channel unreachable'));
 
     // Must NOT throw — approval creation is the primary path, activity
-    // channel posting is best-effort.
-    const id = createApproval(paths, 'bob', 'TestOrg', 'Silent-skip test', 'other', 'context');
+    // channel posting is best-effort. Errors are caught inside
+    // postApprovalToActivityChannel so createApproval's await resolves
+    // normally even on a rejected post promise.
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Silent-skip test', 'other', 'context');
 
     // The approval file still lands on disk.
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
     expect(existsSync(pendingFile)).toBe(true);
   });
+
+  it('REGRESSION GUARD: postActivity fan-out MUST settle before createApproval returns', async () => {
+    // This locks in the fix for the CLI-exit bug shipped in commit 36ae543
+    // (the first version of the activity-channel approvals feature). The
+    // original code fired postActivity without awaiting, so short-lived
+    // callers like the CLI action handler would exit before the fetch
+    // completed and the Telegram post silently never sent.
+    //
+    // Mechanism: mock postActivity with a deferred-resolve promise. Assert
+    // that createApproval's returned promise does NOT resolve before the
+    // postActivity mock has resolved. If a future refactor restores the
+    // fire-and-forget pattern, this test fails because createApproval
+    // would resolve immediately while the postActivity promise is still
+    // pending.
+    let postActivityResolver: (() => void) | undefined;
+    const postActivityPromise = new Promise<boolean>((resolve) => {
+      postActivityResolver = () => resolve(true);
+    });
+    postActivitySpy.mockReturnValueOnce(postActivityPromise);
+
+    let createApprovalResolved = false;
+    const createApprovalPromise = createApproval(
+      paths,
+      'bob',
+      'TestOrg',
+      'Regression test',
+      'deployment',
+    ).then((id) => {
+      createApprovalResolved = true;
+      return id;
+    });
+
+    // Let the event loop tick so any synchronous-completing paths finish.
+    await new Promise((r) => setImmediate(r));
+    // postActivity has been CALLED but the returned promise is still
+    // pending. createApproval MUST still be pending too (if it resolved
+    // here, that would mean it did not await the fan-out).
+    expect(postActivitySpy).toHaveBeenCalledTimes(1);
+    expect(createApprovalResolved).toBe(false);
+
+    // Now release the postActivity promise. createApproval should resolve
+    // shortly after.
+    postActivityResolver!();
+    const id = await createApprovalPromise;
+    expect(createApprovalResolved).toBe(true);
+    expect(id).toMatch(/^approval_\d+_[a-zA-Z0-9]+$/);
+  });
 });
 
 describe('updateApproval (regression guard for activity-channel callback path)', () => {
-  it('moves the approval file from pending/ to resolved/ with status+note', () => {
+  it('moves the approval file from pending/ to resolved/ with status+note', async () => {
     // The handleActivityCallback path calls updateApproval with an audit
     // note ("via Telegram activity channel by <user>"). This test
     // regression-guards that updateApproval still produces the exact file
     // shape (move + status + resolved_by note) that the rest of the
     // system expects downstream.
-    const id = createApproval(paths, 'bob', 'TestOrg', 'Test resolve', 'deployment');
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Test resolve', 'deployment');
     updateApproval(paths, id, 'approved', 'via Telegram activity channel by Clint (@clintm)');
 
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
@@ -134,9 +183,9 @@ describe('updateApproval (regression guard for activity-channel callback path)',
 });
 
 describe('listPendingApprovals', () => {
-  it('returns only approvals still in pending/ (not resolved)', () => {
-    const id1 = createApproval(paths, 'bob', 'TestOrg', 'Still pending', 'deployment');
-    const id2 = createApproval(paths, 'bob', 'TestOrg', 'Will be resolved', 'deployment');
+  it('returns only approvals still in pending/ (not resolved)', async () => {
+    const id1 = await createApproval(paths, 'bob', 'TestOrg', 'Still pending', 'deployment');
+    const id2 = await createApproval(paths, 'bob', 'TestOrg', 'Will be resolved', 'deployment');
     updateApproval(paths, id2, 'approved');
 
     const pending = listPendingApprovals(paths);
