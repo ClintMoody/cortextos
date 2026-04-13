@@ -24,10 +24,19 @@ function buildApprovalKeyboard(approvalId: string): object {
 
 /**
  * Post a newly-created approval to the org's activity channel with
- * Approve/Deny inline buttons. Fire-and-forget — if the activity channel
- * is unconfigured, unreachable, or the post fails, approval creation
- * still succeeds (the file-based state store is the source of truth,
- * and the dashboard UI path always works regardless).
+ * Approve/Deny inline buttons. Returns a promise that resolves once the
+ * post attempt has settled (either succeeded or been caught-and-suppressed).
+ *
+ * Errors are suppressed so activity-channel failures do not block approval
+ * creation — if the activity channel is unconfigured, unreachable, or the
+ * post fails, approval creation still succeeds (the file-based state store
+ * is the source of truth, and the dashboard UI path always works regardless).
+ *
+ * The returned promise MUST be awaited by the caller in short-lived
+ * contexts (CLI action handlers, single-request RPC paths) or the process
+ * may exit before the underlying fetch completes and the post silently
+ * never sends. Fire-and-forget pattern only works in long-running
+ * processes like the daemon or dashboard — it is unsafe for the CLI.
  */
 function postApprovalToActivityChannel(
   paths: BusPaths,
@@ -37,7 +46,7 @@ function postApprovalToActivityChannel(
   category: ApprovalCategory,
   agentName: string,
   context?: string,
-): void {
+): Promise<void> {
   const orgDir = join(paths.ctxRoot, 'orgs', org);
   const lines = [
     `🔔 Approval request: ${title}`,
@@ -50,23 +59,29 @@ function postApprovalToActivityChannel(
   lines.push('', `id: ${approvalId}`);
   const message = lines.join('\n');
 
-  postActivity(orgDir, paths.ctxRoot, org, message, buildApprovalKeyboard(approvalId)).catch(() => {
-    // Best-effort — swallow errors, the approval itself already landed.
-  });
+  return postActivity(orgDir, paths.ctxRoot, org, message, buildApprovalKeyboard(approvalId))
+    .then(() => undefined)
+    .catch(() => undefined); // Best-effort — swallow errors, the approval itself already landed.
 }
 
 /**
  * Create an approval request.
  * Identical to bash create-approval.sh format.
+ *
+ * Returns a Promise that resolves to the approval id AFTER the
+ * activity-channel fan-out has settled. Callers in short-lived contexts
+ * (CLI action handlers) MUST await — otherwise the process may exit before
+ * the Telegram post completes and the post silently never sends. See the
+ * JSDoc on postApprovalToActivityChannel for the underlying rationale.
  */
-export function createApproval(
+export async function createApproval(
   paths: BusPaths,
   agentName: string,
   org: string,
   title: string,
   category: ApprovalCategory,
   context?: string,
-): string {
+): Promise<string> {
   validateApprovalCategory(category);
 
   const epoch = Math.floor(Date.now() / 1000);
@@ -93,11 +108,13 @@ export function createApproval(
   atomicWriteSync(join(pendingDir, `${approvalId}.json`), JSON.stringify(approval));
 
   // Fan-out to the activity channel so Clint can approve/deny from Telegram
-  // without opening the dashboard. Fire-and-forget: if the channel is not
-  // configured (no activity-channel.env) or unreachable, approval creation
-  // still succeeds. Callbacks route back via the orchestrator's
-  // activity-channel poller (see daemon/agent-manager.ts).
-  postApprovalToActivityChannel(paths, org, approvalId, title, category, agentName, context);
+  // without opening the dashboard. AWAITED so short-lived CLI callers do
+  // not exit before the Telegram post fetch completes. Errors are
+  // suppressed inside postApprovalToActivityChannel — activity-channel
+  // unreachable must not block approval creation. Callbacks route back
+  // via the orchestrator's activity-channel poller (see
+  // daemon/agent-manager.ts).
+  await postApprovalToActivityChannel(paths, org, approvalId, title, category, agentName, context);
 
   return approvalId;
 }
