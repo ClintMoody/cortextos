@@ -5,6 +5,55 @@ import { atomicWriteSync, ensureDir } from '../utils/atomic.js';
 import { randomString } from '../utils/random.js';
 import { validateApprovalCategory } from '../utils/validate.js';
 import { sendMessage } from './message.js';
+import { postActivity } from './system.js';
+
+/**
+ * Build the inline keyboard posted to the activity channel alongside a
+ * newly-created approval. Two buttons (Approve / Deny) with callback_data
+ * keyed on the approval id so fast-checker's activity-channel callback
+ * handler can route them to updateApproval.
+ */
+function buildApprovalKeyboard(approvalId: string): object {
+  return {
+    inline_keyboard: [[
+      { text: '✅ Approve', callback_data: `appr_allow_${approvalId}` },
+      { text: '❌ Deny', callback_data: `appr_deny_${approvalId}` },
+    ]],
+  };
+}
+
+/**
+ * Post a newly-created approval to the org's activity channel with
+ * Approve/Deny inline buttons. Fire-and-forget — if the activity channel
+ * is unconfigured, unreachable, or the post fails, approval creation
+ * still succeeds (the file-based state store is the source of truth,
+ * and the dashboard UI path always works regardless).
+ */
+function postApprovalToActivityChannel(
+  paths: BusPaths,
+  org: string,
+  approvalId: string,
+  title: string,
+  category: ApprovalCategory,
+  agentName: string,
+  context?: string,
+): void {
+  const orgDir = join(paths.ctxRoot, 'orgs', org);
+  const lines = [
+    `🔔 Approval request: ${title}`,
+    `Category: ${category}`,
+    `Requested by: ${agentName}`,
+  ];
+  if (context) {
+    lines.push('', context);
+  }
+  lines.push('', `id: ${approvalId}`);
+  const message = lines.join('\n');
+
+  postActivity(orgDir, paths.ctxRoot, org, message, buildApprovalKeyboard(approvalId)).catch(() => {
+    // Best-effort — swallow errors, the approval itself already landed.
+  });
+}
 
 /**
  * Create an approval request.
@@ -42,6 +91,13 @@ export function createApproval(
   const pendingDir = join(paths.approvalDir, 'pending');
   ensureDir(pendingDir);
   atomicWriteSync(join(pendingDir, `${approvalId}.json`), JSON.stringify(approval));
+
+  // Fan-out to the activity channel so Clint can approve/deny from Telegram
+  // without opening the dashboard. Fire-and-forget: if the channel is not
+  // configured (no activity-channel.env) or unreachable, approval creation
+  // still succeeds. Callbacks route back via the orchestrator's
+  // activity-channel poller (see daemon/agent-manager.ts).
+  postApprovalToActivityChannel(paths, org, approvalId, title, category, agentName, context);
 
   return approvalId;
 }
