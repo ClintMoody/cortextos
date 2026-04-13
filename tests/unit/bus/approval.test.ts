@@ -17,6 +17,7 @@ import { createApproval, updateApproval, listPendingApprovals } from '../../../s
 import type { BusPaths } from '../../../src/types';
 
 let testDir: string;
+let frameworkRoot: string;
 let paths: BusPaths;
 
 function mkPaths(root: string): BusPaths {
@@ -36,18 +37,27 @@ function mkPaths(root: string): BusPaths {
 
 beforeEach(() => {
   testDir = mkdtempSync(join(tmpdir(), 'cortextos-approval-test-'));
+  // Distinct framework root so the path-resolution regression test can
+  // verify postActivity receives the FRAMEWORK path, not the runtime
+  // state (ctxRoot) path. In production these are separate directories
+  // (~/cortextOS/ vs ~/.cortextos/default/) and the approval bug shipped
+  // because the original code conflated them.
+  frameworkRoot = mkdtempSync(join(tmpdir(), 'cortextos-framework-test-'));
   paths = mkPaths(testDir);
   postActivitySpy.mockClear();
   postActivitySpy.mockResolvedValue(true);
+  delete process.env.CTX_FRAMEWORK_ROOT;
 });
 
 afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
+  rmSync(frameworkRoot, { recursive: true, force: true });
+  delete process.env.CTX_FRAMEWORK_ROOT;
 });
 
 describe('createApproval', () => {
   it('writes the approval JSON to pending/ and returns a stable id', async () => {
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Deploy to prod', 'deployment', 'why this matters');
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Deploy to prod', 'deployment', 'why this matters', frameworkRoot);
     expect(id).toMatch(/^approval_\d+_[a-zA-Z0-9]+$/);
 
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
@@ -61,8 +71,8 @@ describe('createApproval', () => {
     expect(approval.org).toBe('TestOrg');
   });
 
-  it('posts to the activity channel with Approve/Deny inline keyboard', async () => {
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Push to main', 'deployment', 'rationale');
+  it('posts to the activity channel with Approve/Deny inline keyboard (framework orgDir, not ctxRoot)', async () => {
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Push to main', 'deployment', 'rationale', frameworkRoot);
 
     expect(postActivitySpy).toHaveBeenCalledTimes(1);
     const [orgDir, ctxRoot, org, message, replyMarkup] = postActivitySpy.mock.calls[0] as [
@@ -72,7 +82,14 @@ describe('createApproval', () => {
       string,
       any,
     ];
-    expect(String(orgDir)).toBe(join(testDir, 'orgs', 'TestOrg'));
+    // REGRESSION GUARD: orgDir must resolve under the FRAMEWORK root
+    // (where activity-channel.env actually lives in production), NOT
+    // under the runtime state ctxRoot. An earlier version of this code
+    // used ctxRoot, which silently resolved to the wrong filesystem root
+    // and caused every activity-channel post to fail — the bug that
+    // motivated this test.
+    expect(String(orgDir)).toBe(join(frameworkRoot, 'orgs', 'TestOrg'));
+    expect(String(orgDir)).not.toBe(join(testDir, 'orgs', 'TestOrg'));
     expect(String(ctxRoot)).toBe(testDir);
     expect(String(org)).toBe('TestOrg');
     expect(String(message)).toContain('Push to main');
@@ -101,11 +118,68 @@ describe('createApproval', () => {
     // channel posting is best-effort. Errors are caught inside
     // postApprovalToActivityChannel so createApproval's await resolves
     // normally even on a rejected post promise.
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Silent-skip test', 'other', 'context');
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Silent-skip test', 'other', 'context', frameworkRoot);
 
     // The approval file still lands on disk.
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
     expect(existsSync(pendingFile)).toBe(true);
+  });
+
+  it('REGRESSION GUARD: warns when postActivity returns false (not-configured signal)', async () => {
+    // Silent false-return is the observability gap that hid the path
+    // resolution bug for hours. If postActivity ever returns false
+    // (activity-channel.env missing or unparseable), there must be a
+    // visible [approval] warn on stderr. This test locks in the warn.
+    postActivitySpy.mockResolvedValueOnce(false);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Warn test', 'deployment', 'ctx', frameworkRoot);
+
+    const warnCalls = warnSpy.mock.calls.map((c) => c.join(' '));
+    expect(warnCalls.some((w) => w.includes('[approval]') && w.includes(id))).toBe(true);
+    // Warn must name the expected path so the operator can fix it.
+    expect(warnCalls.some((w) => w.includes('activity-channel.env'))).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it('REGRESSION GUARD: skips activity-channel post with warn when frameworkRoot is unavailable', async () => {
+    // The earlier version fell back to paths.ctxRoot when frameworkRoot
+    // was missing, silently resolving to the wrong path. That fallback
+    // is DELIBERATELY removed — we skip + warn rather than try a
+    // known-wrong path. This test locks in that decision.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // No frameworkRoot, no CTX_FRAMEWORK_ROOT env (cleared in beforeEach).
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Skip-with-warn test', 'deployment');
+
+    // postActivity must NEVER have been called — we skipped, not tried.
+    expect(postActivitySpy).not.toHaveBeenCalled();
+
+    const warnCalls = warnSpy.mock.calls.map((c) => c.join(' '));
+    expect(warnCalls.some((w) => w.includes('[approval]') && w.includes('No frameworkRoot'))).toBe(true);
+    // Warn must name the approval id and point operators at the fix path.
+    expect(warnCalls.some((w) => w.includes(id))).toBe(true);
+    expect(warnCalls.some((w) => w.includes('CTX_FRAMEWORK_ROOT'))).toBe(true);
+
+    // Approval file still lands on disk — missing frameworkRoot is a
+    // degradation for the activity-channel fan-out, NOT an approval
+    // creation failure.
+    const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
+    expect(existsSync(pendingFile)).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it('falls back to CTX_FRAMEWORK_ROOT env var when frameworkRoot arg is not passed', async () => {
+    // Documents the supported fallback: explicit arg first, then env.
+    // Daemon-side callers may rely on the env var; CLI callers should
+    // pass explicitly but env-fallback keeps them working if they miss.
+    process.env.CTX_FRAMEWORK_ROOT = frameworkRoot;
+
+    await createApproval(paths, 'bob', 'TestOrg', 'Env-fallback test', 'deployment', 'ctx');
+
+    expect(postActivitySpy).toHaveBeenCalledTimes(1);
+    const [orgDir] = postActivitySpy.mock.calls[0] as [string];
+    expect(String(orgDir)).toBe(join(frameworkRoot, 'orgs', 'TestOrg'));
   });
 
   it('REGRESSION GUARD: postActivity fan-out MUST settle before createApproval returns', async () => {
@@ -134,6 +208,8 @@ describe('createApproval', () => {
       'TestOrg',
       'Regression test',
       'deployment',
+      undefined,
+      frameworkRoot,
     ).then((id) => {
       createApprovalResolved = true;
       return id;
@@ -163,7 +239,7 @@ describe('updateApproval (regression guard for activity-channel callback path)',
     // regression-guards that updateApproval still produces the exact file
     // shape (move + status + resolved_by note) that the rest of the
     // system expects downstream.
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Test resolve', 'deployment');
+    const id = await createApproval(paths, 'bob', 'TestOrg', 'Test resolve', 'deployment', undefined, frameworkRoot);
     updateApproval(paths, id, 'approved', 'via Telegram activity channel by Clint (@clintm)');
 
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
@@ -184,8 +260,8 @@ describe('updateApproval (regression guard for activity-channel callback path)',
 
 describe('listPendingApprovals', () => {
   it('returns only approvals still in pending/ (not resolved)', async () => {
-    const id1 = await createApproval(paths, 'bob', 'TestOrg', 'Still pending', 'deployment');
-    const id2 = await createApproval(paths, 'bob', 'TestOrg', 'Will be resolved', 'deployment');
+    const id1 = await createApproval(paths, 'bob', 'TestOrg', 'Still pending', 'deployment', undefined, frameworkRoot);
+    const id2 = await createApproval(paths, 'bob', 'TestOrg', 'Will be resolved', 'deployment', undefined, frameworkRoot);
     updateApproval(paths, id2, 'approved');
 
     const pending = listPendingApprovals(paths);
