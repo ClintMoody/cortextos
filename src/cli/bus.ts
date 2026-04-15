@@ -17,6 +17,7 @@ import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/kn
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
+import { normalizeOrgName } from '../utils/org.js';
 import { IPCClient } from '../daemon/ipc-server.js';
 import { TelegramAPI } from '../telegram/api.js';
 import { logOutboundMessage, cacheLastSent } from '../telegram/logging.js';
@@ -846,11 +847,12 @@ busCommand
   .option('--json', 'Output raw JSON')
   .action((question: string, opts: { org?: string; agent?: string; scope?: string; topK?: string; threshold?: string; json?: boolean }) => {
     const env = resolveEnv();
-    const org = opts.org || env.org;
+    let org = opts.org || env.org;
     if (!org) {
       console.error('ERROR: --org or CTX_ORG required');
       process.exit(1);
     }
+    org = normalizeOrgName(env.frameworkRoot || process.cwd(), org);
 
     const result = queryKnowledgeBase(
       resolvePaths(env.agentName, env.instanceId, org),
@@ -895,11 +897,12 @@ busCommand
   .option('--force', 'Re-ingest even if already indexed')
   .action((paths: string[], opts: { org?: string; agent?: string; scope?: string; force?: boolean }) => {
     const env = resolveEnv();
-    const org = opts.org || env.org;
+    let org = opts.org || env.org;
     if (!org) {
       console.error('ERROR: --org or CTX_ORG required');
       process.exit(1);
     }
+    org = normalizeOrgName(env.frameworkRoot || process.cwd(), org);
 
     ensureKBDirs(env.instanceId, env.frameworkRoot, org);
 
@@ -919,11 +922,12 @@ busCommand
   .option('--org <org>', 'Organization name')
   .action((opts: { org?: string }) => {
     const env = resolveEnv();
-    const org = opts.org || env.org;
+    let org = opts.org || env.org;
     if (!org) {
       console.error('ERROR: --org or CTX_ORG required');
       process.exit(1);
     }
+    org = normalizeOrgName(env.frameworkRoot || process.cwd(), org);
 
     const { execFileSync } = require('child_process');
     const { existsSync, readFileSync } = require('fs');
@@ -1127,9 +1131,10 @@ busCommand
       // Daemon not running — no running agent data available
     }
 
+    const filterOrg = opts.org ? normalizeOrgName(frameworkRoot, opts.org) : undefined;
     const results = [];
     for (const [name, info] of Object.entries(agentMap)) {
-      if (opts.org && info.org !== opts.org) continue;
+      if (filterOrg && info.org !== filterOrg) continue;
 
       const running = runningAgents.has(name);
       if (opts.status === 'running' && !running) continue;
