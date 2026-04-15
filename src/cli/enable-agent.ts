@@ -29,7 +29,7 @@ export function discoverProjectRoot(): string {
   return process.cwd();
 }
 
-function parseEnvFile(path: string): Record<string, string> {
+export function parseEnvFile(path: string): Record<string, string> {
   const vars: Record<string, string> = {};
   try {
     const lines = readFileSync(path, 'utf-8').split('\n');
