@@ -437,10 +437,10 @@ Reply using: cortextos bus send-telegram ${chatId} '<your reply>'
     const chatId = query.message?.chat?.id;
     const messageId = query.message?.message_id;
     const callbackQueryId = query.id;
-    const status = decision === 'allow' ? 'approved' : 'denied';
+    const status = decision === 'allow' ? 'approved' : 'rejected';
 
-    // Build a friendly audit-trail suffix: "by Clint (@clintm)" or just
-    // "by Clint" if no username. Falls back to the Telegram user id if
+    // Build a friendly audit-trail suffix: "by Alice (@alice)" or just
+    // "by Alice" if no username. Falls back to the Telegram user id if
     // both are missing (shouldn't happen in practice but guards edge).
     const firstName = query.from?.first_name;
     const username = query.from?.username;

@@ -13,6 +13,8 @@ import { collectTelegramCommands, registerTelegramCommands } from '../bus/metric
 import { stripControlChars } from '../utils/validate.js';
 import { processMediaMessage } from '../telegram/media.js';
 
+type LogFn = (msg: string) => void;
+
 /**
  * Manages all agents in a cortextOS instance.
  */

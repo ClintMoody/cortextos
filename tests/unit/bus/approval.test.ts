@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe('createApproval', () => {
   it('writes the approval JSON to pending/ and returns a stable id', async () => {
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Deploy to prod', 'deployment', 'why this matters', frameworkRoot);
+    const id = await createApproval(paths, 'alice', 'TestOrg', 'Deploy to prod', 'deployment', 'why this matters', frameworkRoot);
     expect(id).toMatch(/^approval_\d+_[a-zA-Z0-9]+$/);
 
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
@@ -67,12 +67,12 @@ describe('createApproval', () => {
     expect(approval.title).toBe('Deploy to prod');
     expect(approval.category).toBe('deployment');
     expect(approval.status).toBe('pending');
-    expect(approval.requesting_agent).toBe('bob');
+    expect(approval.requesting_agent).toBe('alice');
     expect(approval.org).toBe('TestOrg');
   });
 
   it('posts to the activity channel with Approve/Deny inline keyboard (framework orgDir, not ctxRoot)', async () => {
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Push to main', 'deployment', 'rationale', frameworkRoot);
+    const id = await createApproval(paths, 'alice', 'TestOrg', 'Push to main', 'deployment', 'rationale', frameworkRoot);
 
     expect(postActivitySpy).toHaveBeenCalledTimes(1);
     const [orgDir, ctxRoot, org, message, replyMarkup] = postActivitySpy.mock.calls[0] as [
@@ -94,7 +94,7 @@ describe('createApproval', () => {
     expect(String(org)).toBe('TestOrg');
     expect(String(message)).toContain('Push to main');
     expect(String(message)).toContain('deployment');
-    expect(String(message)).toContain('bob');
+    expect(String(message)).toContain('alice');
     expect(String(message)).toContain(id);
 
     // Inline keyboard: single row, two buttons, callback_data prefixes
@@ -118,7 +118,7 @@ describe('createApproval', () => {
     // channel posting is best-effort. Errors are caught inside
     // postApprovalToActivityChannel so createApproval's await resolves
     // normally even on a rejected post promise.
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Silent-skip test', 'other', 'context', frameworkRoot);
+    const id = await createApproval(paths, 'alice', 'TestOrg', 'Silent-skip test', 'other', 'context', frameworkRoot);
 
     // The approval file still lands on disk.
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
@@ -133,7 +133,7 @@ describe('createApproval', () => {
     postActivitySpy.mockResolvedValueOnce(false);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Warn test', 'deployment', 'ctx', frameworkRoot);
+    const id = await createApproval(paths, 'alice', 'TestOrg', 'Warn test', 'deployment', 'ctx', frameworkRoot);
 
     const warnCalls = warnSpy.mock.calls.map((c) => c.join(' '));
     expect(warnCalls.some((w) => w.includes('[approval]') && w.includes(id))).toBe(true);
@@ -150,7 +150,7 @@ describe('createApproval', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // No frameworkRoot, no CTX_FRAMEWORK_ROOT env (cleared in beforeEach).
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Skip-with-warn test', 'deployment');
+    const id = await createApproval(paths, 'alice', 'TestOrg', 'Skip-with-warn test', 'deployment');
 
     // postActivity must NEVER have been called — we skipped, not tried.
     expect(postActivitySpy).not.toHaveBeenCalled();
@@ -175,7 +175,7 @@ describe('createApproval', () => {
     // pass explicitly but env-fallback keeps them working if they miss.
     process.env.CTX_FRAMEWORK_ROOT = frameworkRoot;
 
-    await createApproval(paths, 'bob', 'TestOrg', 'Env-fallback test', 'deployment', 'ctx');
+    await createApproval(paths, 'alice', 'TestOrg', 'Env-fallback test', 'deployment', 'ctx');
 
     expect(postActivitySpy).toHaveBeenCalledTimes(1);
     const [orgDir] = postActivitySpy.mock.calls[0] as [string];
@@ -204,7 +204,7 @@ describe('createApproval', () => {
     let createApprovalResolved = false;
     const createApprovalPromise = createApproval(
       paths,
-      'bob',
+      'alice',
       'TestOrg',
       'Regression test',
       'deployment',
@@ -239,8 +239,8 @@ describe('updateApproval (regression guard for activity-channel callback path)',
     // regression-guards that updateApproval still produces the exact file
     // shape (move + status + resolved_by note) that the rest of the
     // system expects downstream.
-    const id = await createApproval(paths, 'bob', 'TestOrg', 'Test resolve', 'deployment', undefined, frameworkRoot);
-    updateApproval(paths, id, 'approved', 'via Telegram activity channel by Clint (@clintm)');
+    const id = await createApproval(paths, 'alice', 'TestOrg', 'Test resolve', 'deployment', undefined, frameworkRoot);
+    updateApproval(paths, id, 'approved', 'via Telegram activity channel by Alice (@alice)');
 
     const pendingFile = join(paths.approvalDir, 'pending', `${id}.json`);
     const resolvedFile = join(paths.approvalDir, 'resolved', `${id}.json`);
@@ -249,7 +249,7 @@ describe('updateApproval (regression guard for activity-channel callback path)',
 
     const approval = JSON.parse(readFileSync(resolvedFile, 'utf-8'));
     expect(approval.status).toBe('approved');
-    expect(approval.resolved_by).toBe('via Telegram activity channel by Clint (@clintm)');
+    expect(approval.resolved_by).toBe('via Telegram activity channel by Alice (@alice)');
     expect(approval.resolved_at).toBeTruthy();
   });
 
@@ -260,8 +260,8 @@ describe('updateApproval (regression guard for activity-channel callback path)',
 
 describe('listPendingApprovals', () => {
   it('returns only approvals still in pending/ (not resolved)', async () => {
-    const id1 = await createApproval(paths, 'bob', 'TestOrg', 'Still pending', 'deployment', undefined, frameworkRoot);
-    const id2 = await createApproval(paths, 'bob', 'TestOrg', 'Will be resolved', 'deployment', undefined, frameworkRoot);
+    const id1 = await createApproval(paths, 'alice', 'TestOrg', 'Still pending', 'deployment', undefined, frameworkRoot);
+    const id2 = await createApproval(paths, 'alice', 'TestOrg', 'Will be resolved', 'deployment', undefined, frameworkRoot);
     updateApproval(paths, id2, 'approved');
 
     const pending = listPendingApprovals(paths);

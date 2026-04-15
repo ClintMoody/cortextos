@@ -52,14 +52,30 @@ const fsMocks = {
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
+  // Getter-based exposure of the fsMocks vi.fn()s. Two consumer patterns
+  // need to coexist on this file:
+  //   (1) `fsMocks.X.mockReset()` — used by the BUG-040 / restarts.log
+  //       tests added by this patch
+  //   (2) `vi.mocked(fs.X).mockImplementation(...)` — used by the
+  //       verifyCronsAfterIdle tests + BUG-048 reschedule tests
+  // For (2) to work, `fs.X` MUST resolve to the same vi.fn() instance as
+  // `fsMocks.X`. Naive direct reference (`existsSync: fsMocks.existsSync`)
+  // breaks because vi.mock factories are hoisted + executed BEFORE the
+  // `const fsMocks = {...}` initializer — so the lookup captures
+  // `undefined`. Arrow wrappers (`(...args) => fsMocks.X(...args)`) keep
+  // (1) working but break (2) because `fs.X` is no longer a vi.fn — it's
+  // a plain arrow function, and `vi.mocked()` does not recognize it as
+  // mockable. Getters thread the needle: the lookup is deferred until
+  // call time (after fsMocks is initialized), and the value returned IS
+  // the underlying vi.fn so `vi.mocked()` recognizes it.
   return {
     ...actual,
     mkdirSync: vi.fn(),
-    existsSync: (...args: Parameters<typeof fsMocks.existsSync>) => fsMocks.existsSync(...args),
-    readFileSync: (...args: Parameters<typeof fsMocks.readFileSync>) => fsMocks.readFileSync(...args),
-    writeFileSync: (...args: Parameters<typeof fsMocks.writeFileSync>) => fsMocks.writeFileSync(...args),
-    appendFileSync: (...args: Parameters<typeof fsMocks.appendFileSync>) => fsMocks.appendFileSync(...args),
-    statSync: (...args: Parameters<typeof fsMocks.statSync>) => fsMocks.statSync(...args),
+    get existsSync() { return fsMocks.existsSync; },
+    get readFileSync() { return fsMocks.readFileSync; },
+    get writeFileSync() { return fsMocks.writeFileSync; },
+    get appendFileSync() { return fsMocks.appendFileSync; },
+    get statSync() { return fsMocks.statSync; },
   };
 });
 
@@ -270,12 +286,9 @@ describe('AgentProcess - cron auto-verification', () => {
   });
 
   it('verifyCronsAfterIdle: injects prompt containing cron names once idle flag appears newer than boot', async () => {
-    // Merge note: upstream test uses vi.mocked(fs.existsSync) to get the mock,
-    // but this file mocks fs via a custom fsMocks passthrough pattern (see top
-    // of file). vi.mocked() returns the passthrough arrow function, not a real
-    // mock. Alias to fsMocks.* which IS the real mock underneath.
-    const mockExistsSync = fsMocks.existsSync;
-    const mockReadFileSync = fsMocks.readFileSync;
+    const fs = await import('fs');
+    const mockExistsSync = vi.mocked(fs.existsSync);
+    const mockReadFileSync = vi.mocked(fs.readFileSync);
 
     const bootTs = 1000;
     const idleTs = 2000;
@@ -342,11 +355,9 @@ describe('AgentProcess - BUG-048 fix (session timer re-reads config)', () => {
   });
 
   it('reschedules when config.json on disk has a longer max_session_seconds', async () => {
-    // Merge note: upstream test uses vi.mocked(fs.existsSync) but this file
-    // mocks fs via fsMocks passthrough (see top). vi.mocked returns the
-    // arrow function not the real mock. Alias to fsMocks.* per d90f79f.
-    const mockExistsSync = fsMocks.existsSync;
-    const mockReadFileSync = fsMocks.readFileSync;
+    const fs = await import('fs');
+    const mockExistsSync = vi.mocked(fs.existsSync);
+    const mockReadFileSync = vi.mocked(fs.readFileSync);
 
     const refreshSpy = vi.fn().mockResolvedValue(undefined);
 

@@ -84,7 +84,7 @@ describe('FastChecker', () => {
       const approval = {
         id,
         title: 'Test approval',
-        requesting_agent: 'bob',
+        requesting_agent: 'alice',
         org: 'TestOrg',
         category: 'deployment',
         status: 'pending',
@@ -109,7 +109,7 @@ describe('FastChecker', () => {
       });
 
       const query = createCallbackQuery(`appr_allow_${approvalId}`, {
-        from: { id: 42, first_name: 'Clint', username: 'clintm' },
+        from: { id: 42, first_name: 'Alice', username: 'alice' },
       });
       await checker.handleActivityCallback(query, activityApi);
 
@@ -120,14 +120,14 @@ describe('FastChecker', () => {
       expect(existsSync(resolvedFile)).toBe(true);
       const approval = JSON.parse(readFileSync(resolvedFile, 'utf-8'));
       expect(approval.status).toBe('approved');
-      expect(approval.resolved_by).toContain('Clint');
-      expect(approval.resolved_by).toContain('@clintm');
+      expect(approval.resolved_by).toContain('Alice');
+      expect(approval.resolved_by).toContain('@alice');
 
       // Telegram side effects: answerCallbackQuery + editMessageText called.
       expect(activityApi.answerCallbackQuery).toHaveBeenCalledWith('cb-123', 'Approved');
       expect(activityApi.editMessageText).toHaveBeenCalled();
       const editCall = activityApi.editMessageText.mock.calls[0];
-      expect(String(editCall[2])).toMatch(/Approved by Clint/);
+      expect(String(editCall[2])).toMatch(/Approved by Alice/);
     });
 
     it('appr_deny_<id>: resolves approval to denied with audit label', async () => {
@@ -142,17 +142,17 @@ describe('FastChecker', () => {
       });
 
       const query = createCallbackQuery(`appr_deny_${approvalId}`, {
-        from: { id: 42, first_name: 'Clint', username: 'clintm' },
+        from: { id: 42, first_name: 'Alice', username: 'alice' },
       });
       await checker.handleActivityCallback(query, activityApi);
 
       const resolvedFile = join(paths.approvalDir, 'resolved', `${approvalId}.json`);
       expect(existsSync(resolvedFile)).toBe(true);
       const approval = JSON.parse(readFileSync(resolvedFile, 'utf-8'));
-      expect(approval.status).toBe('denied');
+      expect(approval.status).toBe('rejected');
       expect(activityApi.answerCallbackQuery).toHaveBeenCalledWith('cb-123', 'Denied');
       const editCall = activityApi.editMessageText.mock.calls[0];
-      expect(String(editCall[2])).toMatch(/Denied by Clint/);
+      expect(String(editCall[2])).toMatch(/Denied by Alice/);
     });
 
     it('rejects callbacks from non-whitelisted users with no state change', async () => {
@@ -188,7 +188,7 @@ describe('FastChecker', () => {
       });
 
       const query = createCallbackQuery('appr_allow_approval_1_ghost', {
-        from: { id: 42, first_name: 'Clint', username: 'clintm' },
+        from: { id: 42, first_name: 'Alice', username: 'alice' },
       });
       await checker.handleActivityCallback(query, activityApi);
 
@@ -216,7 +216,7 @@ describe('FastChecker', () => {
       // forwards a permission button message into the activity chat)
       // getting silently acted on. Must reject.
       const query = createCallbackQuery('perm_allow_deadbeef', {
-        from: { id: 42, first_name: 'Clint', username: 'clintm' },
+        from: { id: 42, first_name: 'Alice', username: 'alice' },
       });
       await checker.handleActivityCallback(query, activityApi);
 
@@ -338,14 +338,14 @@ describe('FastChecker', () => {
 
     it('works without last-sent context', () => {
       const result = FastChecker.formatTelegramTextMessage(
-        'bob',
+        'alice',
         '123',
         'Hi',
         '/opt/cortextos',
       );
 
       expect(result).not.toContain('[Your last message');
-      expect(result).toContain('=== TELEGRAM from [USER: bob] (chat_id:123) ===');
+      expect(result).toContain('=== TELEGRAM from [USER: alice] (chat_id:123) ===');
       expect(result).toContain('Hi');
     });
 
@@ -707,7 +707,7 @@ describe('FastChecker', () => {
     });
 
     it('uses "unknown" when duration is undefined', () => {
-      const result = FastChecker.formatTelegramVoiceMessage('Bob', '123', '/tmp/voice.ogg', undefined);
+      const result = FastChecker.formatTelegramVoiceMessage('Alice', '123', '/tmp/voice.ogg', undefined);
 
       expect(result).toContain('duration: unknowns');
     });

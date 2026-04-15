@@ -145,8 +145,8 @@ export async function createApproval(
   ensureDir(pendingDir);
   atomicWriteSync(join(pendingDir, `${approvalId}.json`), JSON.stringify(approval));
 
-  // Fan-out to the activity channel so Clint can approve/deny from Telegram
-  // without opening the dashboard. AWAITED so short-lived CLI callers do
+  // Fan-out to the activity channel so the operator can approve/deny from
+  // Telegram without opening the dashboard. AWAITED so short-lived CLI callers do
   // not exit before the Telegram post fetch completes. Errors are
   // suppressed inside postApprovalToActivityChannel — activity-channel
   // unreachable must not block approval creation. Callbacks route back
