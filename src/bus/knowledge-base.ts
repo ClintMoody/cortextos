@@ -286,9 +286,11 @@ export function ingestKnowledgeBase(
     collection = `shared-${org}`;
   }
 
-  // Ensure chromadb dir exists
-  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
-  const chromaDir = join(kbRoot, 'chromadb');
+  // Ensure chromadb dir exists. Reuse the canonical path that buildKBEnv
+  // already resolved (MMRAG_CHROMADB_DIR) instead of rebuilding it from
+  // homedir+instanceId+org — avoids drift if the MMRAG_* resolution
+  // rules ever change.
+  const chromaDir = env.MMRAG_CHROMADB_DIR;
   if (!existsSync(chromaDir)) {
     mkdirSync(chromaDir, { recursive: true });
   }
