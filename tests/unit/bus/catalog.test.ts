@@ -60,6 +60,18 @@ describe('installCommunityItem — install_path normalization (task_177623277537
     }
   });
 
+  it('skill targets .claude/skills/<name>/ under agentDir — the Claude Code harness path', () => {
+    writeCatalog('community/skills/tasks');
+    const agentDir = mkdtempSync(join(tmpdir(), 'catalog-agent-'));
+    try {
+      const r = installCommunityItem(frameworkRoot, ctxRoot, 'tasks', { agentDir });
+      expect(r.status).toBe('installed');
+      expect((r as { target: string }).target).toBe(join(agentDir, '.claude', 'skills', 'tasks'));
+    } finally {
+      rmSync(agentDir, { recursive: true, force: true });
+    }
+  });
+
   it('path traversal still rejected after normalization', () => {
     writeCatalog('community/../../../etc/passwd');
     const r = installCommunityItem(frameworkRoot, ctxRoot, 'tasks');

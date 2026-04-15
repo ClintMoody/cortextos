@@ -257,7 +257,11 @@ export function installCommunityItem(
   let targetDir: string;
   switch (item.type) {
     case 'skill':
-      targetDir = join(options.agentDir || frameworkRoot, 'skills', itemName);
+      // Skills must land under .claude/skills/ because that is where the
+      // Claude Code harness actually discovers them. Writing to a bare
+      // skills/ directory meant installs silently didn't load without a
+      // manual cp into .claude/skills/ after the fact.
+      targetDir = join(options.agentDir || frameworkRoot, '.claude', 'skills', itemName);
       break;
     case 'agent':
       targetDir = join(frameworkRoot, 'templates', 'personas', itemName);
