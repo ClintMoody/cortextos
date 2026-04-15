@@ -229,7 +229,10 @@ export function installCommunityItem(
     return { status: 'error', name: itemName, error: 'item not found in catalog' };
   }
 
-  const installPath = item.install_path;
+  // Normalize install_path: strip an optional leading "community/" so entries
+  // authored as either "community/skills/X" (shipped catalog shape) or
+  // "skills/X" (submit-writes shape) both resolve correctly under communityBase.
+  const installPath = item.install_path.replace(/^community\//, '');
 
   // Validate install_path to prevent path traversal
   if (installPath.includes('..') || installPath.startsWith('/')) {
