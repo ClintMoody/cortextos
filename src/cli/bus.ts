@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { sendMessage, checkInbox, ackInbox } from '../bus/message.js';
 import { validateAgentName } from '../utils/validate.js';
-import { createTask, updateTask, completeTask, claimTask, readTaskAudit, checkTaskDependencies, listTasks, checkStaleTasks, archiveTasks, checkHumanTasks } from '../bus/task.js';
+import { createTask, updateTask, completeTask, claimTask, readTaskAudit, checkTaskDependencies, compactTasks, listTasks, checkStaleTasks, archiveTasks, checkHumanTasks } from '../bus/task.js';
 import { saveOutput } from '../bus/save-output.js';
 import { logEvent } from '../bus/event.js';
 import { updateHeartbeat, readAllHeartbeats } from '../bus/heartbeat.js';
@@ -192,6 +192,29 @@ busCommand
 
     updateTask(paths, id, status as TaskStatus);
     console.log(`Updated ${id} -> ${status}`);
+  });
+
+busCommand
+  .command('compact-tasks')
+  .description('Archive completed tasks older than N days into a per-month archive-YYYY-MM.jsonl and remove them from the active list — preserves audit logs, skips tasks still needed as blockers')
+  .option('--older-than <days>', 'Cutoff in days (default: 30)', '30')
+  .option('--dry-run', 'Report what would be compacted without modifying anything')
+  .action((opts: { olderThan: string; dryRun?: boolean }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const olderThanDays = parseInt(opts.olderThan, 10);
+    if (isNaN(olderThanDays) || olderThanDays < 0) {
+      console.error('--older-than must be a non-negative integer');
+      process.exit(1);
+    }
+    const report = compactTasks(paths, { olderThanDays, dryRun: opts.dryRun });
+    const verb = report.dry_run ? 'would compact' : 'compacted';
+    console.log(`${verb} ${report.archived.length} task${report.archived.length === 1 ? '' : 's'}, skipped ${report.skipped.length}`);
+    for (const a of report.archived) console.log(`  ✓ ${a.id}  ->  ${a.archive_file}`);
+    if (report.skipped.length > 0) {
+      console.log(`\nSkipped (common reasons: within cutoff, still needed as blocker):`);
+      for (const s of report.skipped) console.log(`  - ${s.id}  (${s.reason})`);
+    }
   });
 
 busCommand
