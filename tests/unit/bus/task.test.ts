@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createTask, updateTask, completeTask, claimTask, listTasks, findTaskFile } from '../../../src/bus/task';
+import { createTask, updateTask, completeTask, claimTask, readTaskAudit, listTasks, findTaskFile } from '../../../src/bus/task';
 import type { BusPaths } from '../../../src/types';
 
 describe('Task Management', () => {
@@ -396,5 +396,94 @@ describe('claimTask — atomic claim (beads-inspired)', () => {
     rmSync(join(paths.taskDir, `${id}.json`));
     expect(() => claimTask(paths, id, 'alice')).toThrow(/not found in any org/);
     expect(existsSync(claimPath)).toBe(false);
+  });
+});
+
+describe('Task audit log (append-only JSONL)', () => {
+  let testDir: string;
+  let paths: BusPaths;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'cortextos-audit-test-'));
+    paths = {
+      ctxRoot: testDir,
+      inbox: join(testDir, 'inbox', 'x'),
+      inflight: join(testDir, 'inflight', 'x'),
+      processed: join(testDir, 'processed', 'x'),
+      logDir: join(testDir, 'logs', 'x'),
+      stateDir: join(testDir, 'state', 'x'),
+      taskDir: join(testDir, 'tasks'),
+      approvalDir: join(testDir, 'approvals'),
+      analyticsDir: join(testDir, 'analytics'),
+      heartbeatDir: join(testDir, 'heartbeats'),
+    };
+  });
+
+  afterEach(() => { rmSync(testDir, { recursive: true, force: true }); });
+
+  it('createTask writes one "create" audit entry', () => {
+    const id = createTask(paths, 'alice', 'acme', 'First task', { description: 'd' });
+    const log = readTaskAudit(paths, id);
+    expect(log.length).toBe(1);
+    expect(log[0].event).toBe('create');
+    expect(log[0].agent).toBe('alice');
+    expect(log[0].to).toBe('pending');
+    expect(log[0].note).toBe('First task');
+  });
+
+  it('full lifecycle records create + claim + complete in order', () => {
+    const id = createTask(paths, 'alice', 'acme', 'Lifecycle');
+    claimTask(paths, id, 'alice');
+    completeTask(paths, id, 'shipped');
+
+    const log = readTaskAudit(paths, id);
+    expect(log.map(e => e.event)).toEqual(['create', 'claim', 'complete']);
+    expect(log[1].from).toBe('pending');
+    expect(log[1].to).toBe('in_progress');
+    expect(log[1].agent).toBe('alice');
+    expect(log[2].from).toBe('in_progress');
+    expect(log[2].to).toBe('completed');
+    expect(log[2].note).toBe('shipped');
+  });
+
+  it('updateTask audit captures from->to transition with assignee as agent', () => {
+    const id = createTask(paths, 'alice', 'acme', 'Updatable', { assignee: 'alice' });
+    updateTask(paths, id, 'blocked');
+    updateTask(paths, id, 'pending');
+
+    const log = readTaskAudit(paths, id);
+    expect(log.length).toBe(3); // create + 2 updates
+    expect(log[1].event).toBe('update');
+    expect(log[1].from).toBe('pending');
+    expect(log[1].to).toBe('blocked');
+    expect(log[1].agent).toBe('alice');
+    expect(log[2].from).toBe('blocked');
+    expect(log[2].to).toBe('pending');
+  });
+
+  it('audit log is append-only — existing entries are never overwritten', () => {
+    const id = createTask(paths, 'alice', 'acme', 'Append proof');
+    const path = join(paths.taskDir, 'audit', `${id}.jsonl`);
+    const before = readFileSync(path, 'utf-8');
+    updateTask(paths, id, 'blocked');
+    const after = readFileSync(path, 'utf-8');
+    expect(after.startsWith(before)).toBe(true);
+    expect(after.length).toBeGreaterThan(before.length);
+  });
+
+  it('corrupt lines are skipped without blocking replay of surrounding entries', () => {
+    const id = createTask(paths, 'alice', 'acme', 'Corrupt survivor');
+    const path = join(paths.taskDir, 'audit', `${id}.jsonl`);
+    // Inject a malformed line between two valid ones
+    writeFileSync(path, readFileSync(path, 'utf-8') + 'not-json-at-all\n');
+    updateTask(paths, id, 'in_progress');
+    const log = readTaskAudit(paths, id);
+    expect(log.length).toBe(2); // create + update, corrupt middle line skipped
+    expect(log[0].event).toBe('create');
+    expect(log[1].event).toBe('update');
+  });
+
+  it('readTaskAudit returns [] for a task with no history', () => {
+    expect(readTaskAudit(paths, 'task_nonexistent_000')).toEqual([]);
   });
 });
