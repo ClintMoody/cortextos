@@ -20,6 +20,8 @@ export function createTask(
     project?: string;
     needsApproval?: boolean;
     dueDate?: string;
+    blockedBy?: string[];
+    blocks?: string[];
   } = {},
 ): string {
   const {
@@ -29,6 +31,8 @@ export function createTask(
     project = '',
     needsApproval = false,
     dueDate = '',
+    blockedBy = [],
+    blocks = [],
   } = options;
 
   validatePriority(priority);
@@ -56,14 +60,115 @@ export function createTask(
     completed_at: null,
     due_date: dueDate || null,
     archived: false,
+    ...(blockedBy.length ? { blocked_by: [...blockedBy] } : {}),
+    ...(blocks.length ? { blocks: [...blocks] } : {}),
   };
 
   ensureDir(paths.taskDir);
   atomicWriteSync(join(paths.taskDir, `${taskId}.json`), JSON.stringify(task));
 
+  // Maintain the symmetric edge on each dependency: if A is blocked_by B,
+  // then B's `blocks` list gains A. Same for the inverse. Cycle detection
+  // runs on the dependency we're adding (blocked_by) to catch loops at
+  // creation time rather than at resolution time.
+  if (blockedBy.length) {
+    detectCycleOrThrow(paths, taskId, blockedBy);
+    for (const depId of blockedBy) addSymmetricEdge(paths, depId, 'blocks', taskId);
+  }
+  if (blocks.length) {
+    for (const downId of blocks) {
+      // Adding "A blocks B" means B is blocked_by A. Cycle check from B.
+      detectCycleOrThrow(paths, downId, [taskId]);
+      addSymmetricEdge(paths, downId, 'blocked_by', taskId);
+    }
+  }
+
   appendTaskAudit(paths, taskId, { event: 'create', agent: agentName, to: 'pending', note: title });
 
   return taskId;
+}
+
+/**
+ * Mutate an existing task to add an edge to its blocks/blocked_by list.
+ * No-op if the peer id is already present. Used to maintain symmetric
+ * edges when a new task declares its dependencies.
+ */
+function addSymmetricEdge(
+  paths: BusPaths,
+  taskId: string,
+  field: 'blocks' | 'blocked_by',
+  peerId: string,
+): void {
+  const filePath = findTaskFile(paths, taskId);
+  if (!filePath) return; // Peer task missing — surfaced at resolution time.
+  try {
+    const task = JSON.parse(readFileSync(filePath, 'utf-8')) as Task;
+    const list = task[field] ?? [];
+    if (!list.includes(peerId)) {
+      task[field] = [...list, peerId];
+      atomicWriteSync(filePath, JSON.stringify(task));
+    }
+  } catch { /* best-effort */ }
+}
+
+/**
+ * Walk the dependency DAG rooted at `newTaskId` depth-first along its
+ * proposed `blocked_by` edges and throw if the walk re-enters
+ * `newTaskId`. Only checks the `blocked_by` direction — cycles are
+ * topologically symmetric, so walking one direction catches them all.
+ */
+function detectCycleOrThrow(
+  paths: BusPaths,
+  newTaskId: string,
+  initialBlockers: string[],
+): void {
+  const seen = new Set<string>();
+  const stack = [...initialBlockers];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (cur === newTaskId) {
+      throw new Error(`Dependency cycle: ${newTaskId} ultimately blocks itself via ${cur}`);
+    }
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    const filePath = findTaskFile(paths, cur);
+    if (!filePath) continue; // Missing peer is not a cycle, just a dangling ref.
+    try {
+      const task = JSON.parse(readFileSync(filePath, 'utf-8')) as Task;
+      if (task.blocked_by?.length) stack.push(...task.blocked_by);
+    } catch { /* skip */ }
+  }
+}
+
+/**
+ * Resolve blockers for `taskId`: returns the list of tasks in its
+ * `blocked_by` that are NOT yet completed. Empty list = good to go.
+ * A missing peer is reported as `{ id, status: 'missing' }` so callers
+ * can distinguish "dependency cleared" from "dependency references a
+ * task that no longer exists".
+ */
+export function checkTaskDependencies(
+  paths: BusPaths,
+  taskId: string,
+): Array<{ id: string; status: TaskStatus | 'missing' }> {
+  const filePath = findTaskFile(paths, taskId);
+  if (!filePath) return [];
+  let task: Task;
+  try { task = JSON.parse(readFileSync(filePath, 'utf-8')) as Task; }
+  catch { return []; }
+  const deps = task.blocked_by ?? [];
+  const open: Array<{ id: string; status: TaskStatus | 'missing' }> = [];
+  for (const depId of deps) {
+    const depPath = findTaskFile(paths, depId);
+    if (!depPath) { open.push({ id: depId, status: 'missing' }); continue; }
+    try {
+      const dep = JSON.parse(readFileSync(depPath, 'utf-8')) as Task;
+      if (dep.status !== 'completed') open.push({ id: depId, status: dep.status });
+    } catch {
+      open.push({ id: depId, status: 'missing' });
+    }
+  }
+  return open;
 }
 
 /**
@@ -365,6 +470,7 @@ export function listTasks(
     agent?: string;
     status?: TaskStatus;
     priority?: Priority;
+    respectDeps?: boolean;
   },
 ): Task[] {
   const { taskDir } = paths;
@@ -395,9 +501,31 @@ export function listTasks(
     }
   }
 
-  return tasks.sort(
+  const sorted = tasks.sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
+
+  if (!filters?.respectDeps) return sorted;
+
+  // DAG-aware ordering: unblocked tasks first, blocked ones after, with
+  // the secondary order preserving created_at DESC within each bucket.
+  // "Blocked" = any blocked_by entry resolves to non-completed.
+  const byId = new Map<string, Task>();
+  for (const t of sorted) byId.set(t.id, t);
+  const isBlocked = (t: Task): boolean => {
+    for (const depId of t.blocked_by ?? []) {
+      const dep = byId.get(depId);
+      // Out-of-list deps are checked on-disk via checkTaskDependencies,
+      // but the list-view only considers in-list tasks for speed.
+      if (!dep) continue;
+      if (dep.status !== 'completed') return true;
+    }
+    return false;
+  };
+  const unblocked: Task[] = [];
+  const blocked: Task[] = [];
+  for (const t of sorted) (isBlocked(t) ? blocked : unblocked).push(t);
+  return [...unblocked, ...blocked];
 }
 
 /**
