@@ -93,7 +93,7 @@ export function resolveEnv(overrides?: Partial<CtxEnv>): CtxEnv {
     }
   }
   if (org) {
-    // Org names from the env may use mixed-case (e.g. ElementOneSound) when the
+    // Org names from the env may use mixed-case (e.g. AcmeCorp) when the
     // org directory was created before strict lowercase validation was enforced.
     // Only reject values that contain path-traversal characters or whitespace;
     // lowercase enforcement is a CLI-layer concern, not an env-resolution concern.

@@ -723,7 +723,7 @@ export function compactTasks(
   // long as ANY open task has it in its blocked_by chain — not just
   // direct parents. With A <- B <- C and C open, the direct-only
   // guard preserved B but archived A, leaving B with a dangling
-  // reference to an archived task. Boss's Phase 4 directive was
+  // reference to an archived task. Phase 4 directive was
   // "still in the blocked_by chain of a pending task" — the
   // full-chain reading is the correct one.
   const byId = new Map<string, Task>();
