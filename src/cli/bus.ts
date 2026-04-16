@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { sendMessage, checkInbox, ackInbox } from '../bus/message.js';
 import { validateAgentName } from '../utils/validate.js';
-import { createTask, updateTask, completeTask, claimTask, listTasks, checkStaleTasks, archiveTasks, checkHumanTasks } from '../bus/task.js';
+import { createTask, updateTask, completeTask, claimTask, readTaskAudit, listTasks, checkStaleTasks, archiveTasks, checkHumanTasks } from '../bus/task.js';
 import { saveOutput } from '../bus/save-output.js';
 import { logEvent } from '../bus/event.js';
 import { updateHeartbeat, readAllHeartbeats } from '../bus/heartbeat.js';
@@ -188,6 +188,31 @@ busCommand
 
     updateTask(paths, id, status as TaskStatus);
     console.log(`Updated ${id} -> ${status}`);
+  });
+
+busCommand
+  .command('task-history')
+  .description("Show a task's append-only audit log (every status change, claim, and completion)")
+  .argument('<id>', 'Task ID')
+  .option('--json', 'Emit raw JSONL instead of formatted text')
+  .action((id: string, opts: { json?: boolean }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const entries = readTaskAudit(paths, id);
+    if (entries.length === 0) {
+      console.log(`No audit log for task ${id}`);
+      return;
+    }
+    if (opts.json) {
+      for (const e of entries) console.log(JSON.stringify(e));
+      return;
+    }
+    console.log(`Audit log for ${id} (${entries.length} entries):`);
+    for (const e of entries) {
+      const transition = e.from && e.to ? `${e.from} -> ${e.to}` : e.to || '';
+      const note = e.note ? ` | ${e.note}` : '';
+      console.log(`  ${e.ts}  ${e.event.padEnd(8)}  ${e.agent.padEnd(16)}  ${transition}${note}`);
+    }
   });
 
 busCommand

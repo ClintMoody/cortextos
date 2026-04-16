@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import type { Task, Priority, TaskStatus, BusPaths, StaleTaskReport, ArchiveReport } from '../types/index.js';
 import { atomicWriteSync, ensureDir } from '../utils/atomic.js';
@@ -60,6 +60,8 @@ export function createTask(
 
   ensureDir(paths.taskDir);
   atomicWriteSync(join(paths.taskDir, `${taskId}.json`), JSON.stringify(task));
+
+  appendTaskAudit(paths, taskId, { event: 'create', agent: agentName, to: 'pending', note: title });
 
   return taskId;
 }
@@ -144,15 +146,83 @@ export function updateTask(
       `Task ${taskId} not found in any org under ${paths.ctxRoot}/orgs/`,
     );
   }
+  let prevStatus: TaskStatus | undefined;
+  let assignee: string | undefined;
   try {
     const content = readFileSync(filePath, 'utf-8');
     const task: Task = JSON.parse(content);
+    prevStatus = task.status;
+    assignee = task.assigned_to;
     task.status = status;
     task.updated_at = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     atomicWriteSync(filePath, JSON.stringify(task));
   } catch (err) {
     throw new Error(`Task ${taskId} update failed: ${err}`);
   }
+  appendTaskAudit(paths, taskId, { event: 'update', agent: assignee || 'unknown', from: prevStatus, to: status });
+}
+
+/**
+ * One audit entry written to a task's append-only JSONL log. Every
+ * status transition, claim, and completion emits one of these so the
+ * full lifecycle can be replayed from disk.
+ */
+export interface TaskAuditEntry {
+  ts: string; // ISO 8601
+  event: 'create' | 'claim' | 'update' | 'complete';
+  agent: string; // who caused the event
+  from?: TaskStatus;
+  to?: TaskStatus;
+  note?: string;
+}
+
+/**
+ * Append one audit line to `<taskDir>/audit/<taskId>.jsonl`. Uses
+ * appendFileSync so concurrent writers each get O_APPEND semantics on
+ * POSIX — partial interleaving at the sub-line level is possible on
+ * some filesystems for lines over PIPE_BUF, but our entries are
+ * ~200 bytes, comfortably under the 4096-byte atomicity bound.
+ *
+ * Best-effort: a failing audit write never blocks the caller. The
+ * audit log is an observability aid, not the source of truth.
+ */
+export function appendTaskAudit(
+  paths: BusPaths,
+  taskId: string,
+  entry: Omit<TaskAuditEntry, 'ts'>,
+): void {
+  try {
+    const auditDir = join(paths.taskDir, 'audit');
+    ensureDir(auditDir);
+    const line: TaskAuditEntry = {
+      ts: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      ...entry,
+    };
+    appendFileSync(join(auditDir, `${taskId}.jsonl`), JSON.stringify(line) + '\n', { encoding: 'utf-8', mode: 0o600 });
+  } catch {
+    // Never block a real operation on audit-log write failure.
+  }
+}
+
+/**
+ * Read all audit entries for a task in write-order. Returns empty
+ * array if no audit log exists. Corrupt lines are skipped so a
+ * partially-written line (rare: write crashed mid-line) does not
+ * block history replay of surrounding entries.
+ */
+export function readTaskAudit(
+  paths: BusPaths,
+  taskId: string,
+): TaskAuditEntry[] {
+  const path = join(paths.taskDir, 'audit', `${taskId}.jsonl`);
+  if (!existsSync(path)) return [];
+  const entries: TaskAuditEntry[] = [];
+  for (const line of readFileSync(path, 'utf-8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try { entries.push(JSON.parse(trimmed) as TaskAuditEntry); } catch { /* skip corrupt */ }
+  }
+  return entries;
 }
 
 /**
@@ -232,6 +302,7 @@ export function claimTask(
   }
 
   // Lock held — safe to mutate the task JSON.
+  const prevStatus = task.status;
   task.status = 'in_progress';
   task.assigned_to = agent;
   task.updated_at = now;
@@ -243,6 +314,7 @@ export function claimTask(
     try { unlinkSync(claimPath); } catch { /* best-effort */ }
     throw new Error(`Task ${taskId} claim commit failed: ${err}`);
   }
+  appendTaskAudit(paths, taskId, { event: 'claim', agent, from: prevStatus, to: 'in_progress' });
   return task;
 }
 
@@ -263,9 +335,13 @@ export function completeTask(
       `Task ${taskId} not found in any org under ${paths.ctxRoot}/orgs/`,
     );
   }
+  let prevStatus: TaskStatus | undefined;
+  let assignee: string | undefined;
   try {
     const content = readFileSync(filePath, 'utf-8');
     const task: Task = JSON.parse(content);
+    prevStatus = task.status;
+    assignee = task.assigned_to;
     task.status = 'completed';
     task.updated_at = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     task.completed_at = task.updated_at;
@@ -276,6 +352,7 @@ export function completeTask(
   } catch (err) {
     throw new Error(`Task ${taskId} complete failed: ${err}`);
   }
+  appendTaskAudit(paths, taskId, { event: 'complete', agent: assignee || 'unknown', from: prevStatus, to: 'completed', note: result });
 }
 
 /**
