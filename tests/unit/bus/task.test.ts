@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createTask, updateTask, completeTask, claimTask, readTaskAudit, listTasks, findTaskFile } from '../../../src/bus/task';
+import { createTask, updateTask, completeTask, claimTask, readTaskAudit, checkTaskDependencies, listTasks, findTaskFile } from '../../../src/bus/task';
 import type { BusPaths } from '../../../src/types';
 
 describe('Task Management', () => {
@@ -485,5 +485,101 @@ describe('Task audit log (append-only JSONL)', () => {
 
   it('readTaskAudit returns [] for a task with no history', () => {
     expect(readTaskAudit(paths, 'task_nonexistent_000')).toEqual([]);
+  });
+});
+
+describe('Task dependency DAG (blocks / blocked_by)', () => {
+  let testDir: string;
+  let paths: BusPaths;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'cortextos-dag-test-'));
+    paths = {
+      ctxRoot: testDir,
+      inbox: join(testDir, 'inbox', 'x'),
+      inflight: join(testDir, 'inflight', 'x'),
+      processed: join(testDir, 'processed', 'x'),
+      logDir: join(testDir, 'logs', 'x'),
+      stateDir: join(testDir, 'state', 'x'),
+      taskDir: join(testDir, 'tasks'),
+      approvalDir: join(testDir, 'approvals'),
+      analyticsDir: join(testDir, 'analytics'),
+      heartbeatDir: join(testDir, 'heartbeats'),
+    };
+  });
+
+  afterEach(() => { rmSync(testDir, { recursive: true, force: true }); });
+
+  function readTask(id: string) {
+    return JSON.parse(readFileSync(join(paths.taskDir, `${id}.json`), 'utf-8'));
+  }
+
+  it('blocked_by stores the declared dependency + the peer gets a symmetric blocks edge', () => {
+    const a = createTask(paths, 'boss', 'acme', 'A (blocker)');
+    const b = createTask(paths, 'boss', 'acme', 'B (blocked)', { blockedBy: [a] });
+
+    expect(readTask(b).blocked_by).toEqual([a]);
+    expect(readTask(a).blocks).toEqual([b]);
+  });
+
+  it('blocks is the symmetric reverse of blocked_by', () => {
+    const a = createTask(paths, 'boss', 'acme', 'A');
+    const b = createTask(paths, 'boss', 'acme', 'B', { blocks: [a] });
+
+    // "B blocks A" means A is blocked_by B
+    expect(readTask(a).blocked_by).toEqual([b]);
+    expect(readTask(b).blocks).toEqual([a]);
+  });
+
+  it('checkTaskDependencies returns open blockers with their current status', () => {
+    const blocker = createTask(paths, 'boss', 'acme', 'Blocker');
+    const blocked = createTask(paths, 'boss', 'acme', 'Blocked', { blockedBy: [blocker] });
+
+    let open = checkTaskDependencies(paths, blocked);
+    expect(open.length).toBe(1);
+    expect(open[0].id).toBe(blocker);
+    expect(open[0].status).toBe('pending');
+
+    completeTask(paths, blocker, 'done');
+    open = checkTaskDependencies(paths, blocked);
+    expect(open).toEqual([]);
+  });
+
+  it('checkTaskDependencies reports missing:true for dangling dep references', () => {
+    const b = createTask(paths, 'boss', 'acme', 'B', { blockedBy: ['task_nonexistent_777'] });
+    const open = checkTaskDependencies(paths, b);
+    expect(open).toEqual([{ id: 'task_nonexistent_777', status: 'missing' }]);
+  });
+
+  it('cycle detection: A blocked_by B, B blocked_by A throws at creation', () => {
+    const a = createTask(paths, 'boss', 'acme', 'A');
+    const b = createTask(paths, 'boss', 'acme', 'B', { blockedBy: [a] });
+    // A declares new blocked_by edge to B — would form A -> B -> A cycle.
+    expect(() => createTask(paths, 'boss', 'acme', 'A-rewrite', { blockedBy: [b], blocks: [a] })).toThrow(/cycle/i);
+  });
+
+  it('listTasks --respect-deps orders unblocked tasks before blocked ones', () => {
+    const blocker = createTask(paths, 'boss', 'acme', 'Blocker');
+    const blocked = createTask(paths, 'boss', 'acme', 'Blocked', { blockedBy: [blocker] });
+    const free = createTask(paths, 'boss', 'acme', 'Free');
+
+    const ordered = listTasks(paths, { respectDeps: true });
+    const ids = ordered.map(t => t.id);
+    // All 3 present
+    expect(ids).toContain(blocker);
+    expect(ids).toContain(blocked);
+    expect(ids).toContain(free);
+    // `blocked` must come after both `blocker` and `free` in the list.
+    const idx = (id: string) => ids.indexOf(id);
+    expect(idx(blocked)).toBeGreaterThan(idx(blocker));
+    expect(idx(blocked)).toBeGreaterThan(idx(free));
+
+    // Once blocker completes, respectDeps no longer demotes blocked.
+    completeTask(paths, blocker, 'done');
+    const reordered = listTasks(paths, { respectDeps: true });
+    const blockedTask = reordered.find(t => t.id === blocked)!;
+    expect(blockedTask.status).toBe('pending');
+    // Specifically: blocked should no longer be forced after 'free'
+    // (both unblocked now, fall back to created_at ordering).
   });
 });
