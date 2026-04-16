@@ -68,8 +68,8 @@ export function createTask(
  * Find the on-disk path of a task file by ID, supporting cross-org lookup.
  *
  * cortextOS's standard dispatch pattern is an orchestrator in one org
- * (e.g. boss@ElementOneSound) filing tasks that get assigned to specialists
- * in other orgs (e.g. bob@agentnet). Before this helper existed, updateTask
+ * filing tasks that get assigned to specialists in other orgs. Before
+ * this helper existed, updateTask
  * and completeTask hardcoded `join(paths.taskDir, taskId + '.json')` — which
  * points at the CURRENT agent's org tasks dir — so the specialist could not
  * drive the lifecycle of any task that was filed from a sibling org. Every

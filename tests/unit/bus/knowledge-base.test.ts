@@ -42,16 +42,16 @@ const { queryKnowledgeBase, ingestKnowledgeBase } = await import('../../../src/b
 // Minimal BusPaths stub — knowledge-base.ts doesn't actually USE the paths
 // object at call time, just the options/env it constructs.
 const dummyPaths = {
-  stateDir: '/tmp/bob/state',
-  logDir: '/tmp/bob/logs',
-  ctxRoot: '/tmp/bob',
+  stateDir: '/tmp/agent/state',
+  logDir: '/tmp/agent/logs',
+  ctxRoot: '/tmp/agent',
   instanceId: 'test',
   agentName: 'tester',
   org: 'TestOrg',
-  inboxDir: '/tmp/bob/inbox',
-  inflightDir: '/tmp/bob/inflight',
-  processedDir: '/tmp/bob/processed',
-  outboxDir: '/tmp/bob/outbox',
+  inboxDir: '/tmp/agent/inbox',
+  inflightDir: '/tmp/agent/inflight',
+  processedDir: '/tmp/agent/processed',
+  outboxDir: '/tmp/agent/outbox',
 } as any;
 
 const baseOptions = {

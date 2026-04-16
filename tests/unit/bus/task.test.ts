@@ -117,8 +117,8 @@ describe('Task Management', () => {
  * Cross-org task lifecycle — exercises the findTaskFile fallback so an
  * assignee in one org can drive the lifecycle of a task filed by an
  * orchestrator in a sibling org. Standard cortextOS dispatch pattern:
- * boss@ElementOneSound files a task, bob@agentnet needs to update and
- * complete it from his own agent session.
+ * an orchestrator in one org files a task, a specialist in another org
+ * needs to update and complete it from their own agent session.
  *
  * These tests build a REAL nested filesystem layout (matching the
  * production shape at ~/.cortextos/<instance>/orgs/<org>/tasks/) so they
@@ -202,10 +202,10 @@ describe('Cross-org task lifecycle', () => {
   });
 
   it('updateTask cross-org: finds task in sibling org via findTaskFile fallback', () => {
-    // The exact bug boss hit: file a task in OrgB, try to update it from
-    // an OrgA-scoped session. Before findTaskFile, this threw "Task not
-    // found" because updateTask only looked at orgAPaths.taskDir.
-    const taskId = 'task_1775939913834_528';
+    // Repro: file a task in OrgB, try to update it from an OrgA-scoped
+    // session. Before findTaskFile, this threw "Task not found" because
+    // updateTask only looked at orgAPaths.taskDir.
+    const taskId = 'task_test_001';
     writeOrgBTask(taskId);
 
     updateTask(orgAPaths, taskId, 'in_progress');
@@ -232,7 +232,7 @@ describe('Cross-org task lifecycle', () => {
   });
 
   it('completeTask cross-org: finds task in sibling org and marks it done', () => {
-    const taskId = 'task_1775939913834_529';
+    const taskId = 'task_test_002';
     writeOrgBTask(taskId);
 
     completeTask(orgAPaths, taskId, 'cross-org completion');
@@ -303,9 +303,9 @@ describe('Cross-org task lifecycle', () => {
   });
 
   it('listTasks scoping regression: must remain single-org, NO cross-org leakage', () => {
-    // CRITICAL regression guard. Boss's explicit scoping note was:
-    // "listTasks must remain single-org by default — cross-org listing
-    // requires an explicit opt-in flag that does not exist yet." A future
+    // CRITICAL regression guard. Scoping contract:
+    // listTasks must remain single-org by default — cross-org listing
+    // requires an explicit opt-in flag that does not exist yet. A future
     // well-meaning refactor that 'helpfully' makes listTasks cross-org by
     // default would silently break the dashboard, which depends on
     // per-org scoping for its sync loop. If this test fails, the refactor

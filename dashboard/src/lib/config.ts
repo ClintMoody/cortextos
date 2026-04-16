@@ -209,3 +209,7 @@ export function getAllAgents(): Array<{ name: string; org: string }> {
 
   return agents;
 }
+
+export function getAllowedRootsConfigPath(): string {
+  return path.join(CTX_ROOT, 'config', 'allowed-roots.json');
+}
