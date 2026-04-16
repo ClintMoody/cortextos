@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, renameSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import type { Task, Priority, TaskStatus, BusPaths, StaleTaskReport, ArchiveReport } from '../types/index.js';
 import { atomicWriteSync, ensureDir } from '../utils/atomic.js';
@@ -153,6 +153,97 @@ export function updateTask(
   } catch (err) {
     throw new Error(`Task ${taskId} update failed: ${err}`);
   }
+}
+
+/**
+ * Atomically claim a task for an agent. Prevents two agents from double-
+ * picking the same task — a race that previously could happen because
+ * `update-task <id> in_progress` was a read-modify-write with no lock.
+ *
+ * Mechanism: write a companion claim-lock file via the POSIX O_EXCL
+ * path (`writeFileSync` with `flag: 'wx'`). The first writer wins; the
+ * second gets EEXIST and claimTask throws "already claimed by X". Only
+ * after the lock is taken do we flip the task's status + assigned_to.
+ *
+ * Re-claiming a task you already own is idempotent (returns the task
+ * without mutation). Claiming a non-pending task is rejected with a
+ * message that names the current status so operators can diagnose.
+ *
+ * Claim-lock files live at `<taskDir>/.claims/<taskId>.claim` and carry
+ * `<agent>\t<iso8601>` for audit. A later compaction pass can prune
+ * claim-locks for completed tasks; for now they are append-only.
+ */
+export function claimTask(
+  paths: BusPaths,
+  taskId: string,
+  agent: string,
+): Task {
+  const filePath = findTaskFile(paths, taskId);
+  if (!filePath) {
+    throw new Error(
+      `Task ${taskId} not found in any org under ${paths.ctxRoot}/orgs/`,
+    );
+  }
+
+  let task: Task;
+  try {
+    task = JSON.parse(readFileSync(filePath, 'utf-8')) as Task;
+  } catch (err) {
+    throw new Error(`Task ${taskId} claim failed (unreadable): ${err}`);
+  }
+
+  const claimsDir = join(paths.taskDir, '.claims');
+  ensureDir(claimsDir);
+  const claimPath = join(claimsDir, `${taskId}.claim`);
+  const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+  // Idempotency: if this agent already owns the claim, succeed silently.
+  if (existsSync(claimPath)) {
+    try {
+      const owner = readFileSync(claimPath, 'utf-8').split('\t')[0];
+      if (owner === agent) {
+        return task;
+      }
+      throw new Error(
+        `Task ${taskId} already claimed by ${owner} (current status=${task.status})`,
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith(`Task ${taskId} already claimed`)) throw err;
+      // Unreadable claim file — fall through and try the exclusive write.
+    }
+  }
+
+  if (task.status !== 'pending') {
+    throw new Error(
+      `Task ${taskId} is not pending (status=${task.status}); cannot claim`,
+    );
+  }
+
+  // Atomic: O_EXCL fails if the file exists, giving us true mutual
+  // exclusion even under concurrent claims from two agents.
+  try {
+    writeFileSync(claimPath, `${agent}\t${now}\n`, { flag: 'wx', encoding: 'utf-8', mode: 0o600 });
+  } catch (err) {
+    // Someone else won the race — read the winner and surface it.
+    let owner = 'unknown';
+    try { owner = readFileSync(claimPath, 'utf-8').split('\t')[0]; } catch { /* stays 'unknown' */ }
+    if (owner === agent) return task; // Benign race with self — treat as idempotent success.
+    throw new Error(`Task ${taskId} already claimed by ${owner}`);
+  }
+
+  // Lock held — safe to mutate the task JSON.
+  task.status = 'in_progress';
+  task.assigned_to = agent;
+  task.updated_at = now;
+  try {
+    atomicWriteSync(filePath, JSON.stringify(task));
+  } catch (err) {
+    // Roll back the claim so a retry can succeed; we never want a ghost
+    // lock surviving a write failure on the task JSON itself.
+    try { unlinkSync(claimPath); } catch { /* best-effort */ }
+    throw new Error(`Task ${taskId} claim commit failed: ${err}`);
+  }
+  return task;
 }
 
 /**
