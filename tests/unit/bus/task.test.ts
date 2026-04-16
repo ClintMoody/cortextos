@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { createTask, updateTask, completeTask, claimTask, readTaskAudit, checkTaskDependencies, compactTasks, listTasks, findTaskFile } from '../../../src/bus/task';
@@ -558,6 +558,37 @@ describe('Task dependency DAG (blocks / blocked_by)', () => {
     expect(() => createTask(paths, 'boss', 'acme', 'A-rewrite', { blockedBy: [b], blocks: [a] })).toThrow(/cycle/i);
   });
 
+  it('REGRESSION (Roger): cycle-rejected createTask leaves ZERO state on disk — no task json, no audit, no peer mutation', () => {
+    const a = createTask(paths, 'boss', 'acme', 'A');
+    const b = createTask(paths, 'boss', 'acme', 'B', { blockedBy: [a] });
+    const c = createTask(paths, 'boss', 'acme', 'C', { blockedBy: [b] });
+
+    // Snapshot A's blocks list before the cycle-try attempt.
+    const aBlocksBefore = readTask(a).blocks ?? [];
+
+    // Attempt a cycle: new task blocked_by c + blocks a → cycle-try → a → b → c → cycle-try.
+    const filesBefore = readdirSync(paths.taskDir).filter(f => f.startsWith('task_')).sort();
+    expect(() => createTask(paths, 'boss', 'acme', 'cycle-try', { blockedBy: [c], blocks: [a] })).toThrow(/cycle/i);
+
+    // Invariants: (1) no new task JSON, (2) no audit directory entry for the rejected id,
+    // (3) peer A's blocks list unchanged.
+    const filesAfter = readdirSync(paths.taskDir).filter(f => f.startsWith('task_')).sort();
+    expect(filesAfter).toEqual(filesBefore);
+    // A's `blocks` list must not have been mutated by the attempted creation.
+    expect(readTask(a).blocks ?? []).toEqual(aBlocksBefore);
+    // No dangling audit dir file for a task id that never existed.
+    const auditDir = join(paths.taskDir, 'audit');
+    if (existsSync(auditDir)) {
+      const auditFiles = readdirSync(auditDir);
+      // No audit file for any task whose id isn't one of the 3 we successfully created.
+      const validIds = new Set([a, b, c]);
+      for (const f of auditFiles) {
+        const id = f.replace(/\.jsonl$/, '');
+        expect(validIds.has(id)).toBe(true);
+      }
+    }
+  });
+
   it('listTasks --respect-deps orders unblocked tasks before blocked ones', () => {
     const blocker = createTask(paths, 'boss', 'acme', 'Blocker');
     const blocked = createTask(paths, 'boss', 'acme', 'Blocked', { blockedBy: [blocker] });
@@ -673,6 +704,30 @@ describe('compactTasks — semantic compaction of old completed tasks', () => {
     expect(report.archived).toEqual([]);
     expect(report.skipped.find(s => s.id === blocker)?.reason).toMatch(/still.*blocked_by/);
     expect(existsSync(join(paths.taskDir, `${blocker}.json`))).toBe(true);
+  });
+
+  it('REGRESSION (Roger): transitive blocker guard — A<-B<-C with C open preserves BOTH A and B', () => {
+    const a = createTask(paths, 'boss', 'acme', 'A');
+    const b = createTask(paths, 'boss', 'acme', 'B', { blockedBy: [a] });
+    const c = createTask(paths, 'boss', 'acme', 'C', { blockedBy: [b] });
+    expect(c).toBeDefined();
+
+    // A + B both completed and aged out; C stays open.
+    completeTask(paths, a, 'done-a');
+    completeTask(paths, b, 'done-b');
+    backdateCompletion(a, 60);
+    backdateCompletion(b, 60);
+
+    const report = compactTasks(paths, { olderThanDays: 30 });
+    // Neither A nor B should be archived — both are in the transitive
+    // blocker closure of open C.
+    expect(report.archived).toEqual([]);
+    const skippedIds = report.skipped.map(s => s.id).sort();
+    expect(skippedIds).toContain(a);
+    expect(skippedIds).toContain(b);
+    // Both must still be on disk.
+    expect(existsSync(join(paths.taskDir, `${a}.json`))).toBe(true);
+    expect(existsSync(join(paths.taskDir, `${b}.json`))).toBe(true);
   });
 
   it('once the dependent completes, the blocker becomes eligible', () => {

@@ -42,6 +42,19 @@ export function createTask(
   const taskId = `task_${epoch}_${rand}`;
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
+  // Dependency validation FIRST — a cycle must never be allowed to
+  // leave partial state on disk. Earlier iteration wrote the task
+  // JSON before detectCycleOrThrow ran, so a failed cycle check left
+  // a dangling task with a one-way edge and no symmetric peer update.
+  // Order is now: validate → write task → mutate peers → audit. The
+  // cycle walker gets a `virtual` description of the not-yet-written
+  // task so chains that pass through it are still detectable.
+  const virtualTask = { id: taskId, blocked_by: blockedBy };
+  if (blockedBy.length) detectCycleOrThrow(paths, taskId, blockedBy, virtualTask);
+  if (blocks.length) {
+    for (const downId of blocks) detectCycleOrThrow(paths, downId, [taskId], virtualTask);
+  }
+
   const task: Task = {
     id: taskId,
     title,
@@ -67,21 +80,10 @@ export function createTask(
   ensureDir(paths.taskDir);
   atomicWriteSync(join(paths.taskDir, `${taskId}.json`), JSON.stringify(task));
 
-  // Maintain the symmetric edge on each dependency: if A is blocked_by B,
-  // then B's `blocks` list gains A. Same for the inverse. Cycle detection
-  // runs on the dependency we're adding (blocked_by) to catch loops at
-  // creation time rather than at resolution time.
-  if (blockedBy.length) {
-    detectCycleOrThrow(paths, taskId, blockedBy);
-    for (const depId of blockedBy) addSymmetricEdge(paths, depId, 'blocks', taskId);
-  }
-  if (blocks.length) {
-    for (const downId of blocks) {
-      // Adding "A blocks B" means B is blocked_by A. Cycle check from B.
-      detectCycleOrThrow(paths, downId, [taskId]);
-      addSymmetricEdge(paths, downId, 'blocked_by', taskId);
-    }
-  }
+  // Cycle-safe now: validation already passed, so symmetric-edge
+  // maintenance is just mutating peer JSONs.
+  for (const depId of blockedBy) addSymmetricEdge(paths, depId, 'blocks', taskId);
+  for (const downId of blocks) addSymmetricEdge(paths, downId, 'blocked_by', taskId);
 
   appendTaskAudit(paths, taskId, { event: 'create', agent: agentName, to: 'pending', note: title });
 
@@ -116,11 +118,17 @@ function addSymmetricEdge(
  * proposed `blocked_by` edges and throw if the walk re-enters
  * `newTaskId`. Only checks the `blocked_by` direction — cycles are
  * topologically symmetric, so walking one direction catches them all.
+ *
+ * `virtual` lets the caller describe a task that does not yet exist
+ * on disk (the task being created). Without this, running the check
+ * BEFORE the task JSON is written would miss cycles that pass
+ * through the new task itself.
  */
 function detectCycleOrThrow(
   paths: BusPaths,
   newTaskId: string,
   initialBlockers: string[],
+  virtual?: { id: string; blocked_by: string[] },
 ): void {
   const seen = new Set<string>();
   const stack = [...initialBlockers];
@@ -131,6 +139,10 @@ function detectCycleOrThrow(
     }
     if (seen.has(cur)) continue;
     seen.add(cur);
+    if (virtual && cur === virtual.id) {
+      if (virtual.blocked_by.length) stack.push(...virtual.blocked_by);
+      continue;
+    }
     const filePath = findTaskFile(paths, cur);
     if (!filePath) continue; // Missing peer is not a cycle, just a dangling ref.
     try {
@@ -706,14 +718,28 @@ export function compactTasks(
     catch { /* skip corrupt */ }
   }
 
-  // Build a "still-needed" set: task IDs that appear in the blocked_by
-  // list of any task whose status is not yet completed. These are the
-  // blockers that compaction must not remove, even if they themselves
-  // are completed — dependents still need them visible.
+  // Build a "still-needed" set: the TRANSITIVE blocker closure of
+  // every open task. A completed blocker must survive compaction as
+  // long as ANY open task has it in its blocked_by chain — not just
+  // direct parents. With A <- B <- C and C open, the direct-only
+  // guard preserved B but archived A, leaving B with a dangling
+  // reference to an archived task. Boss's Phase 4 directive was
+  // "still in the blocked_by chain of a pending task" — the
+  // full-chain reading is the correct one.
+  const byId = new Map<string, Task>();
+  for (const t of tasks) byId.set(t.id, t);
   const stillNeededAsBlocker = new Set<string>();
+  const stack: string[] = [];
   for (const t of tasks) {
     if (t.status === 'completed') continue;
-    for (const blockerId of t.blocked_by ?? []) stillNeededAsBlocker.add(blockerId);
+    for (const blockerId of t.blocked_by ?? []) stack.push(blockerId);
+  }
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (stillNeededAsBlocker.has(cur)) continue;
+    stillNeededAsBlocker.add(cur);
+    const parent = byId.get(cur);
+    if (parent?.blocked_by?.length) stack.push(...parent.blocked_by);
   }
 
   for (const task of tasks) {
