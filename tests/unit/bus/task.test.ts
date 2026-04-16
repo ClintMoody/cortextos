@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createTask, updateTask, completeTask, claimTask, readTaskAudit, checkTaskDependencies, listTasks, findTaskFile } from '../../../src/bus/task';
+import { createTask, updateTask, completeTask, claimTask, readTaskAudit, checkTaskDependencies, compactTasks, listTasks, findTaskFile } from '../../../src/bus/task';
 import type { BusPaths } from '../../../src/types';
 
 describe('Task Management', () => {
@@ -581,5 +581,134 @@ describe('Task dependency DAG (blocks / blocked_by)', () => {
     expect(blockedTask.status).toBe('pending');
     // Specifically: blocked should no longer be forced after 'free'
     // (both unblocked now, fall back to created_at ordering).
+  });
+});
+
+describe('compactTasks — semantic compaction of old completed tasks', () => {
+  let testDir: string;
+  let paths: BusPaths;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'cortextos-compact-test-'));
+    paths = {
+      ctxRoot: testDir,
+      inbox: join(testDir, 'inbox', 'x'),
+      inflight: join(testDir, 'inflight', 'x'),
+      processed: join(testDir, 'processed', 'x'),
+      logDir: join(testDir, 'logs', 'x'),
+      stateDir: join(testDir, 'state', 'x'),
+      taskDir: join(testDir, 'tasks'),
+      approvalDir: join(testDir, 'approvals'),
+      analyticsDir: join(testDir, 'analytics'),
+      heartbeatDir: join(testDir, 'heartbeats'),
+    };
+  });
+
+  afterEach(() => { rmSync(testDir, { recursive: true, force: true }); });
+
+  // Helper: age a completed task's completed_at by overwriting the JSON.
+  function backdateCompletion(id: string, daysAgo: number) {
+    const p = join(paths.taskDir, `${id}.json`);
+    const t = JSON.parse(readFileSync(p, 'utf-8'));
+    const ts = new Date(Date.now() - daysAgo * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    t.completed_at = ts;
+    t.updated_at = ts;
+    writeFileSync(p, JSON.stringify(t));
+  }
+
+  it('archives a completed task older than cutoff — removes active JSON, preserves audit log', () => {
+    const id = createTask(paths, 'boss', 'acme', 'Old done', { assignee: 'alice' });
+    completeTask(paths, id, 'shipped');
+    backdateCompletion(id, 40);
+
+    const auditPath = join(paths.taskDir, 'audit', `${id}.jsonl`);
+    expect(existsSync(auditPath)).toBe(true);
+
+    const report = compactTasks(paths, { olderThanDays: 30 });
+    expect(report.archived.map(a => a.id)).toEqual([id]);
+    expect(report.skipped).toEqual([]);
+
+    // Active JSON gone, audit log still there
+    expect(existsSync(join(paths.taskDir, `${id}.json`))).toBe(false);
+    expect(existsSync(auditPath)).toBe(true);
+
+    // Archive entry written to the correct month file
+    const archiveFile = report.archived[0].archive_file;
+    const archiveLine = readFileSync(join(paths.taskDir, archiveFile), 'utf-8').trim();
+    const entry = JSON.parse(archiveLine);
+    expect(entry.id).toBe(id);
+    expect(entry.title).toBe('Old done');
+    expect(entry.result).toBe('shipped');
+    expect(entry.assigned_to).toBe('alice');
+  });
+
+  it('skips recently-completed tasks (within cutoff)', () => {
+    const id = createTask(paths, 'boss', 'acme', 'Fresh done');
+    completeTask(paths, id, 'ok');
+    // Leave completed_at as "just now" — should be skipped.
+    const report = compactTasks(paths, { olderThanDays: 30 });
+    expect(report.archived).toEqual([]);
+    expect(report.skipped.find(s => s.id === id)?.reason).toMatch(/within cutoff/);
+  });
+
+  it('skips in-progress and blocked tasks regardless of age', () => {
+    const a = createTask(paths, 'boss', 'acme', 'In progress');
+    claimTask(paths, a, 'alice'); // -> in_progress
+    const b = createTask(paths, 'boss', 'acme', 'Blocked');
+    updateTask(paths, b, 'blocked');
+
+    const report = compactTasks(paths, { olderThanDays: 0 });
+    expect(report.archived).toEqual([]);
+  });
+
+  it('NEVER archives a completed task still referenced by an open task\'s blocked_by chain', () => {
+    const blocker = createTask(paths, 'boss', 'acme', 'Blocker');
+    const dependent = createTask(paths, 'boss', 'acme', 'Dependent', { blockedBy: [blocker] });
+    completeTask(paths, blocker, 'done');
+    backdateCompletion(blocker, 60);
+
+    // Dependent is still pending → blocker must not be compacted away.
+    expect(dependent).toBeDefined();
+    const report = compactTasks(paths, { olderThanDays: 30 });
+    expect(report.archived).toEqual([]);
+    expect(report.skipped.find(s => s.id === blocker)?.reason).toMatch(/still.*blocked_by/);
+    expect(existsSync(join(paths.taskDir, `${blocker}.json`))).toBe(true);
+  });
+
+  it('once the dependent completes, the blocker becomes eligible', () => {
+    const blocker = createTask(paths, 'boss', 'acme', 'Blocker');
+    const dependent = createTask(paths, 'boss', 'acme', 'Dependent', { blockedBy: [blocker] });
+    completeTask(paths, blocker, 'done');
+    backdateCompletion(blocker, 60);
+    completeTask(paths, dependent, 'done');
+    backdateCompletion(dependent, 60);
+
+    const report = compactTasks(paths, { olderThanDays: 30 });
+    const archivedIds = report.archived.map(a => a.id).sort();
+    expect(archivedIds).toEqual([blocker, dependent].sort());
+  });
+
+  it('is idempotent — running a second time on the same data archives nothing', () => {
+    const id = createTask(paths, 'boss', 'acme', 'Run-twice');
+    completeTask(paths, id, 'ok');
+    backdateCompletion(id, 60);
+
+    const first = compactTasks(paths, { olderThanDays: 30 });
+    expect(first.archived.map(a => a.id)).toEqual([id]);
+
+    const second = compactTasks(paths, { olderThanDays: 30 });
+    expect(second.archived).toEqual([]);
+  });
+
+  it('dry-run reports candidates without modifying anything', () => {
+    const id = createTask(paths, 'boss', 'acme', 'Dry-run target');
+    completeTask(paths, id, 'ok');
+    backdateCompletion(id, 60);
+
+    const report = compactTasks(paths, { olderThanDays: 30, dryRun: true });
+    expect(report.dry_run).toBe(true);
+    expect(report.archived.map(a => a.id)).toEqual([id]);
+    // Active JSON still present
+    expect(existsSync(join(paths.taskDir, `${id}.json`))).toBe(true);
   });
 });

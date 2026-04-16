@@ -656,6 +656,108 @@ export function archiveTasks(paths: BusPaths, dryRun: boolean = false): ArchiveR
 }
 
 /**
+ * Semantic compaction of old completed tasks (beads-inspired). Each
+ * eligible task becomes a one-line summary entry in a monthly
+ * `archive-YYYY-MM.jsonl` file (bucketed by the task's completed_at
+ * month), and the active task JSON is removed to keep the task board
+ * small. The audit log (audit/<id>.jsonl) is intentionally preserved
+ * so full lifecycle history survives compaction.
+ *
+ * Guards (a task is SKIPPED if any of the following holds):
+ *   - status !== 'completed'
+ *   - completed_at missing OR completed_at within the cutoff window
+ *   - the task is still listed in some OTHER task's `blocked_by` where
+ *     that other task is not yet completed (compaction must not
+ *     orphan dependency references for unresolved dependents)
+ *
+ * No LLM calls. The "summary" is just title + result + key metadata;
+ * callers supply clean result strings via `complete-task --result`.
+ *
+ * Idempotent: running twice over the same data does nothing the
+ * second time because eligible tasks have already been removed.
+ */
+export interface CompactTasksReport {
+  archived: Array<{ id: string; archive_file: string }>;
+  skipped: Array<{ id: string; reason: string }>;
+  dry_run: boolean;
+}
+
+export function compactTasks(
+  paths: BusPaths,
+  options: { olderThanDays?: number; dryRun?: boolean } = {},
+): CompactTasksReport {
+  const { olderThanDays = 30, dryRun = false } = options;
+  const report: CompactTasksReport = { archived: [], skipped: [], dry_run: dryRun };
+  const cutoffMs = Date.now() - olderThanDays * 86400_000;
+
+  const { taskDir } = paths;
+  let files: string[];
+  try {
+    files = readdirSync(taskDir).filter(f => f.startsWith('task_') && f.endsWith('.json'));
+  } catch {
+    return report;
+  }
+
+  // First pass: load every task so we can check cross-task dependency
+  // references without re-reading files per candidate.
+  const tasks: Task[] = [];
+  for (const f of files) {
+    try { tasks.push(JSON.parse(readFileSync(join(taskDir, f), 'utf-8')) as Task); }
+    catch { /* skip corrupt */ }
+  }
+
+  // Build a "still-needed" set: task IDs that appear in the blocked_by
+  // list of any task whose status is not yet completed. These are the
+  // blockers that compaction must not remove, even if they themselves
+  // are completed — dependents still need them visible.
+  const stillNeededAsBlocker = new Set<string>();
+  for (const t of tasks) {
+    if (t.status === 'completed') continue;
+    for (const blockerId of t.blocked_by ?? []) stillNeededAsBlocker.add(blockerId);
+  }
+
+  for (const task of tasks) {
+    if (task.status !== 'completed') continue;
+    if (!task.completed_at) { report.skipped.push({ id: task.id, reason: 'no completed_at timestamp' }); continue; }
+    const completedMs = new Date(task.completed_at).getTime();
+    if (isNaN(completedMs) || completedMs > cutoffMs) {
+      report.skipped.push({ id: task.id, reason: 'completed_at within cutoff' });
+      continue;
+    }
+    if (stillNeededAsBlocker.has(task.id)) {
+      report.skipped.push({ id: task.id, reason: 'still referenced by an open task\'s blocked_by chain' });
+      continue;
+    }
+
+    const yyyymm = task.completed_at.substring(0, 7); // YYYY-MM
+    const archiveFile = `archive-${yyyymm}.jsonl`;
+    const archivePath = join(taskDir, archiveFile);
+    const entry = {
+      id: task.id,
+      title: task.title,
+      org: task.org,
+      assigned_to: task.assigned_to,
+      completed_at: task.completed_at,
+      archived_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      result: task.result ?? '',
+    };
+
+    if (!dryRun) {
+      try {
+        appendFileSync(archivePath, JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
+        unlinkSync(join(taskDir, `${task.id}.json`));
+      } catch (err) {
+        report.skipped.push({ id: task.id, reason: `archive write failed: ${err}` });
+        continue;
+      }
+    }
+    report.archived.push({ id: task.id, archive_file: archiveFile });
+  }
+
+  return report;
+}
+
+/**
  * Find stale human-assigned tasks. Matches bash check-human-tasks.sh behavior.
  */
 export function checkHumanTasks(paths: BusPaths): Task[] {
