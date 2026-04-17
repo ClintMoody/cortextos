@@ -6,12 +6,12 @@ import { join } from 'path';
  *
  * cortextOS treats the filesystem-exact spelling of an org directory as the
  * canonical identifier. When a caller supplies an org name with drifted
- * casing (e.g. "elementonesound" instead of "ElementOneSound"), every
+ * casing (e.g. "acmecorp" instead of "AcmeCorp"), every
  * downstream path join produces a SEPARATE state directory, which splits
  * runtime artifacts across two ghost dirs and pollutes every consumer that
  * scans the orgs/ parent. Before this helper existed, one lowercase
- * `cortextos bus kb-* --org elementonesound` invocation was enough to
- * bootstrap a phantom `~/.cortextos/default/orgs/elementonesound/` with a
+ * `cortextos bus kb-* --org acmecorp` invocation was enough to
+ * bootstrap a phantom `~/.cortextos/default/orgs/acmecorp/` with a
  * MMRAG config.json that then haunted dashboard sync forever.
  *
  * Resolution order:
@@ -32,25 +32,17 @@ import { join } from 'path';
  *
  * Never returns a name that does not exist on disk. Never normalizes past
  * an exact-case match (case-sensitive filesystems may legitimately host
- * both `ElementOneSound` and `elementonesound` as distinct orgs — we do
+ * both `AcmeCorp` and `acmecorp` as distinct orgs — we do
  * not want to collapse them).
  */
 export function normalizeOrgName(frameworkRoot: string, org: string): string {
   if (!org) return org;
 
   const orgsDir = join(frameworkRoot, 'orgs');
-  const exactPath = join(orgsDir, org);
 
-  // Fast path: exact case match on disk.
-  try {
-    if (existsSync(exactPath) && statSync(exactPath).isDirectory()) {
-      return org;
-    }
-  } catch {
-    return org;
-  }
-
-  // Slow path: case-insensitive scan of the orgs dir.
+  // Read the directory once. Using readdirSync for both paths avoids the
+  // case-insensitive filesystem trap where existsSync('orgs/acmecorp')
+  // returns true on macOS/Windows even when the dir was created as 'AcmeCorp'.
   let entries: string[];
   try {
     entries = readdirSync(orgsDir);
@@ -58,16 +50,20 @@ export function normalizeOrgName(frameworkRoot: string, org: string): string {
     return org;
   }
 
+  // Fast path: exact case match in the listing.
+  if (entries.includes(org)) {
+    try {
+      if (statSync(join(orgsDir, org)).isDirectory()) return org;
+    } catch { /* fall through */ }
+  }
+
+  // Slow path: case-insensitive scan — return the on-disk canonical casing.
   const orgLower = org.toLowerCase();
   for (const entry of entries) {
     if (entry.toLowerCase() === orgLower) {
       try {
-        if (statSync(join(orgsDir, entry)).isDirectory()) {
-          return entry;
-        }
-      } catch {
-        // Skip unreadable entry
-      }
+        if (statSync(join(orgsDir, entry)).isDirectory()) return entry;
+      } catch { /* skip unreadable entry */ }
     }
   }
 

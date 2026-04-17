@@ -122,7 +122,7 @@ export function getAgentDir(name: string, org?: string): string {
 export function getOrgs(): string[] {
   // Read framework root FIRST — it is the source of truth for org naming.
   // When the same org exists in both dirs with drifted casing (e.g. a ghost
-  // `elementonesound/` in state + canonical `ElementOneSound/` in framework),
+  // `acmecorp/` in state + canonical `AcmeCorp/` in framework),
   // we keep the framework casing and discard the state-dir variant. Without
   // this, dashboard sync hits both names and floods the log with lookup
   // failures against the non-existent lowercase dir.

@@ -19,15 +19,15 @@ afterEach(() => {
 
 describe('normalizeOrgName', () => {
   it('exact match: returns input unchanged', () => {
-    mkdirSync(join(fwRoot, 'orgs', 'ElementOneSound'));
-    expect(normalizeOrgName(fwRoot, 'ElementOneSound')).toBe('ElementOneSound');
+    mkdirSync(join(fwRoot, 'orgs', 'AcmeCorp'));
+    expect(normalizeOrgName(fwRoot, 'AcmeCorp')).toBe('AcmeCorp');
   });
 
   it('case drift: lowercase input resolves to CamelCase canonical on disk', () => {
-    mkdirSync(join(fwRoot, 'orgs', 'ElementOneSound'));
-    expect(normalizeOrgName(fwRoot, 'elementonesound')).toBe('ElementOneSound');
-    expect(normalizeOrgName(fwRoot, 'ELEMENTONESOUND')).toBe('ElementOneSound');
-    expect(normalizeOrgName(fwRoot, 'ElementOneSOUND')).toBe('ElementOneSound');
+    mkdirSync(join(fwRoot, 'orgs', 'AcmeCorp'));
+    expect(normalizeOrgName(fwRoot, 'acmecorp')).toBe('AcmeCorp');
+    expect(normalizeOrgName(fwRoot, 'ACMECORP')).toBe('AcmeCorp');
+    expect(normalizeOrgName(fwRoot, 'AcmeCORP')).toBe('AcmeCorp');
   });
 
   it('no match: returns input unchanged (callers get a clearer error at file op time)', () => {
@@ -37,12 +37,12 @@ describe('normalizeOrgName', () => {
 
   it('empty framework orgs dir: returns input unchanged', () => {
     // orgs/ exists but is empty
-    expect(normalizeOrgName(fwRoot, 'ElementOneSound')).toBe('ElementOneSound');
+    expect(normalizeOrgName(fwRoot, 'AcmeCorp')).toBe('AcmeCorp');
   });
 
   it('missing framework orgs dir: returns input unchanged', () => {
     rmSync(join(fwRoot, 'orgs'), { recursive: true });
-    expect(normalizeOrgName(fwRoot, 'ElementOneSound')).toBe('ElementOneSound');
+    expect(normalizeOrgName(fwRoot, 'AcmeCorp')).toBe('AcmeCorp');
   });
 
   it('empty org input: returns empty string (no normalization attempted)', () => {
@@ -50,12 +50,17 @@ describe('normalizeOrgName', () => {
   });
 
   it('exact case match wins over case-insensitive match on case-sensitive filesystems', () => {
-    // Simulate a case-sensitive fs hosting both casings as distinct orgs.
-    mkdirSync(join(fwRoot, 'orgs', 'ElementOneSound'));
-    mkdirSync(join(fwRoot, 'orgs', 'elementonesound'));
+    // macOS/Windows are case-insensitive — both dirs map to the same inode,
+    // so this scenario cannot be simulated there. Skip gracefully.
+    mkdirSync(join(fwRoot, 'orgs', 'AcmeCorp'));
+    try {
+      mkdirSync(join(fwRoot, 'orgs', 'acmecorp'));
+    } catch {
+      return; // case-insensitive filesystem — test not applicable on this OS
+    }
     // Exact match path: return whichever casing the caller asked for.
-    expect(normalizeOrgName(fwRoot, 'ElementOneSound')).toBe('ElementOneSound');
-    expect(normalizeOrgName(fwRoot, 'elementonesound')).toBe('elementonesound');
+    expect(normalizeOrgName(fwRoot, 'AcmeCorp')).toBe('AcmeCorp');
+    expect(normalizeOrgName(fwRoot, 'acmecorp')).toBe('acmecorp');
   });
 
   it('ignores non-directory entries with matching name', () => {

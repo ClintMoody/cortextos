@@ -131,7 +131,7 @@ export function queryKnowledgeBase(
   const { agent, scope = 'all', topK = 5, threshold = 0.5, frameworkRoot, instanceId } = options;
   // Normalize once at the top so every downstream path join, env var, and
   // ChromaDB collection name uses the canonical filesystem casing. Without
-  // this, `shared-elementonesound` and `shared-ElementOneSound` become two
+  // this, `shared-acmecorp` and `shared-AcmeCorp` become two
   // distinct ChromaDB collections and a case-drifted query silently hits
   // the wrong one.
   const org = normalizeOrgName(frameworkRoot, options.org);
@@ -286,11 +286,9 @@ export function ingestKnowledgeBase(
     collection = `shared-${org}`;
   }
 
-  // Ensure chromadb dir exists. Reuse the canonical path that buildKBEnv
-  // already resolved (MMRAG_CHROMADB_DIR) instead of rebuilding it from
-  // homedir+instanceId+org — avoids drift if the MMRAG_* resolution
-  // rules ever change.
-  const chromaDir = env.MMRAG_CHROMADB_DIR;
+  // Ensure chromadb dir exists
+  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');
+  const chromaDir = join(kbRoot, 'chromadb');
   if (!existsSync(chromaDir)) {
     mkdirSync(chromaDir, { recursive: true });
   }
@@ -318,7 +316,7 @@ export function ingestKnowledgeBase(
  *
  * `frameworkRoot` is required so the org name can be normalized to its
  * canonical filesystem casing — without that, a caller passing a drifted
- * name (e.g. "elementonesound") would create a ghost state dir identical
+ * name (e.g. "acmecorp") would create a ghost state dir identical
  * to the one this module was written to prevent.
  */
 export function ensureKBDirs(instanceId: string, frameworkRoot: string, org: string): void {
