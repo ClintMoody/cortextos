@@ -1782,6 +1782,16 @@ busCommand
   .description('SessionStart hook: injects the most recent compaction snapshot as additionalContext to restore working state')
   .action(() => runHook('hook-session-restore'));
 
+busCommand
+  .command('hook-session-start')
+  .description('SessionStart hook: heartbeat update + memory entry + inbox check + event log')
+  .action(() => runHook('hook-session-start'));
+
+busCommand
+  .command('hook-session-end')
+  .description('SessionEnd hook: memory capture + event log for session persistence')
+  .action(() => runHook('hook-session-end'));
+
 // --- OAuth token rotation commands ---
 
 busCommand
