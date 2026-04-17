@@ -20,9 +20,9 @@ export type ContextThreshold = 'ok' | 'warn' | 'alert' | 'critical';
 
 const DEFAULT_CONFIG: Required<ContextMonitorConfig> = {
   check_interval_ms: 60_000,
-  warn_pct: 60,
-  alert_pct: 80,
-  critical_pct: 95,
+  warn_pct: 40,
+  alert_pct: 50,
+  critical_pct: 60,
   max_session_tokens: 200_000,
 };
 
