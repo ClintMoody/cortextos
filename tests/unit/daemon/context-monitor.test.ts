@@ -47,30 +47,30 @@ describe('ContextMonitor — context usage estimation + threshold callbacks', ()
 
   it('fires onWarn callback at warn threshold and writes continuation file', () => {
     const cm = new ContextMonitor('alice', stateDir, logPath, 99999, {
-      max_session_tokens: 100, warn_pct: 60,
+      max_session_tokens: 100, warn_pct: 40, alert_pct: 50, critical_pct: 60,
     });
     const warns: number[] = [];
     cm.setOnWarn((est) => warns.push(est.pct));
 
-    // Push past 60% of 100 tokens → 60+ chars / 4 chars per token
-    writeFileSync(logPath, 'x'.repeat(280), 'utf-8');
+    // Push past 40% of 100 tokens → 40+ chars / 4 chars per token
+    writeFileSync(logPath, 'x'.repeat(180), 'utf-8');
     cm.check();
 
     expect(warns.length).toBe(1);
-    expect(warns[0]).toBeGreaterThanOrEqual(60);
+    expect(warns[0]).toBeGreaterThanOrEqual(40);
     expect(existsSync(join(stateDir, 'continuation.md'))).toBe(true);
   });
 
   it('fires onAlert at alert threshold', () => {
     const cm = new ContextMonitor('alice', stateDir, logPath, 99999, {
-      max_session_tokens: 100, warn_pct: 60, alert_pct: 80,
+      max_session_tokens: 100, warn_pct: 40, alert_pct: 50, critical_pct: 60,
     });
     const alerts: number[] = [];
     cm.setOnAlert((est) => alerts.push(est.pct));
 
-    writeFileSync(logPath, 'x'.repeat(340), 'utf-8'); // ~85 tokens → 85%
-    cm.check(); // fires warn
-    cm.check(); // fires alert (threshold crossed)
+    writeFileSync(logPath, 'x'.repeat(220), 'utf-8'); // ~55 tokens → 55%
+    cm.check(); // fires warn (40%)
+    cm.check(); // fires alert (50%)
 
     expect(alerts.length).toBe(1);
   });
@@ -92,12 +92,12 @@ describe('ContextMonitor — context usage estimation + threshold callbacks', ()
 
   it('each threshold fires only once (no re-fire on repeated checks)', () => {
     const cm = new ContextMonitor('alice', stateDir, logPath, 99999, {
-      max_session_tokens: 100, warn_pct: 60,
+      max_session_tokens: 100, warn_pct: 40, alert_pct: 50, critical_pct: 60,
     });
     const warns: number[] = [];
     cm.setOnWarn((est) => warns.push(est.pct));
 
-    writeFileSync(logPath, 'x'.repeat(280), 'utf-8');
+    writeFileSync(logPath, 'x'.repeat(180), 'utf-8');
     cm.check();
     cm.check();
     cm.check();
@@ -122,12 +122,12 @@ describe('ContextMonitor — context usage estimation + threshold callbacks', ()
     vi.useFakeTimers();
     try {
       const cm = new ContextMonitor('alice', stateDir, logPath, 99999, {
-        check_interval_ms: 100, max_session_tokens: 100, warn_pct: 60,
+        check_interval_ms: 100, max_session_tokens: 100, warn_pct: 40, alert_pct: 50, critical_pct: 60,
       });
       const warns: number[] = [];
       cm.setOnWarn((est) => warns.push(est.pct));
 
-      writeFileSync(logPath, 'x'.repeat(280), 'utf-8');
+      writeFileSync(logPath, 'x'.repeat(180), 'utf-8');
       cm.start();
       vi.advanceTimersByTime(150);
       cm.stop();
