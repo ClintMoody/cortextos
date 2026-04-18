@@ -577,23 +577,33 @@ export class AgentProcess {
     const stateDir = join(this.env.ctxRoot, 'state', this.name);
     this.contextMonitor = new ContextMonitor(this.name, stateDir, logPath, maxSessionS);
 
-    this.contextMonitor.setOnWarn((est) => {
-      this.log(`Context monitor: ${est.pct}% — writing continuation file (${est.signal})`);
+    // Provide burn-classification context so the monitor can distinguish
+    // legitimate large-task burns from runaway loops.
+    const paths = resolvePaths(this.name, this.env.instanceId, this.env.org);
+    this.contextMonitor.setBurnContext({
+      taskDir: paths.taskDir,
+      heartbeatDir: join(this.env.ctxRoot, 'state'),
     });
 
-    this.contextMonitor.setOnAlert((est) => {
-      this.log(`Context monitor: ${est.pct}% — alerting orchestrator (${est.signal})`);
+    this.contextMonitor.setOnWarn((est, burn) => {
+      this.log(`Context monitor: ${est.pct}% — ${burn.classification} (${burn.reasons.join(', ')})`);
+    });
+
+    this.contextMonitor.setOnAlert((est, burn) => {
+      const eventType = burn.classification === 'runaway' ? 'context_runaway' : 'context_large_task';
+      this.log(`Context monitor: ${est.pct}% — ${eventType} (${burn.reasons.join(', ')})`);
       try {
-        const paths = resolvePaths(this.name, this.env.instanceId, this.env.org);
         const { logEvent } = require('../bus/event.js');
-        logEvent(paths, this.name, this.env.org, 'action', 'context_alert', 'warning', {
+        logEvent(paths, this.name, this.env.org, 'action', eventType, 'warning', {
           agent: this.name, pct: est.pct, tokens_est: est.tokens_est, signal: est.signal,
+          burn_classification: burn.classification, has_active_task: burn.has_active_task,
+          heartbeat_fresh: burn.heartbeat_fresh, log_entropy_low: burn.log_entropy_low,
         });
       } catch { /* best-effort */ }
     });
 
-    this.contextMonitor.setOnCritical((est) => {
-      this.log(`Context monitor: ${est.pct}% — triggering graceful self-restart (${est.signal})`);
+    this.contextMonitor.setOnCritical((est, burn) => {
+      this.log(`Context monitor: ${est.pct}% — triggering self-restart (${burn.classification}: ${burn.reasons.join(', ')})`);
       this.sessionRefresh().catch((err) => this.log(`Context-triggered refresh failed: ${err}`));
     });
 
