@@ -138,3 +138,116 @@ describe('ContextMonitor — context usage estimation + threshold callbacks', ()
     }
   });
 });
+
+describe('ContextMonitor — burn classification', () => {
+  let stateDir: string;
+  let logPath: string;
+  let taskDir: string;
+  let heartbeatDir: string;
+
+  beforeEach(() => {
+    stateDir = mkdtempSync(join(tmpdir(), 'ctx-burn-'));
+    logPath = join(stateDir, 'stdout.log');
+    taskDir = join(stateDir, 'tasks');
+    heartbeatDir = join(stateDir, 'heartbeats');
+    writeFileSync(logPath, '', 'utf-8');
+    const { mkdirSync } = require('fs');
+    mkdirSync(taskDir, { recursive: true });
+    mkdirSync(heartbeatDir, { recursive: true });
+  });
+
+  afterEach(() => { rmSync(stateDir, { recursive: true, force: true }); });
+
+  it('classifies as large_task when agent has an in_progress task + fresh heartbeat', () => {
+    // Write a task file
+    writeFileSync(join(taskDir, 'task_123_001.json'), JSON.stringify({
+      id: 'task_123_001', status: 'in_progress', assigned_to: 'alice',
+    }));
+    // Write a fresh heartbeat
+    const { mkdirSync: mkd } = require('fs');
+    mkd(join(heartbeatDir, 'alice'), { recursive: true });
+    writeFileSync(join(heartbeatDir, 'alice', 'heartbeat.json'), JSON.stringify({
+      last_heartbeat: new Date().toISOString(),
+    }));
+
+    const cm = new ContextMonitor('alice', stateDir, logPath, 99999);
+    cm.setBurnContext({ taskDir, heartbeatDir });
+
+    const burn = cm.classifyBurn();
+    expect(burn.classification).toBe('large_task');
+    expect(burn.has_active_task).toBe(true);
+    expect(burn.heartbeat_fresh).toBe(true);
+  });
+
+  it('classifies as runaway when no active task and stale heartbeat', () => {
+    // No tasks, stale heartbeat
+    const { mkdirSync: mkd } = require('fs');
+    mkd(join(heartbeatDir, 'alice'), { recursive: true });
+    writeFileSync(join(heartbeatDir, 'alice', 'heartbeat.json'), JSON.stringify({
+      last_heartbeat: '2020-01-01T00:00:00Z',
+    }));
+
+    const cm = new ContextMonitor('alice', stateDir, logPath, 99999);
+    cm.setBurnContext({ taskDir, heartbeatDir });
+
+    const burn = cm.classifyBurn();
+    expect(burn.classification).toBe('runaway');
+    expect(burn.has_active_task).toBe(false);
+    expect(burn.heartbeat_fresh).toBe(false);
+  });
+
+  it('classifies as runaway when log output is repetitive (low entropy)', () => {
+    // Write repetitive log output (>40% duplicate lines)
+    const repeatedLine = 'ERROR: something went wrong in the loop\n';
+    writeFileSync(logPath, repeatedLine.repeat(200), 'utf-8');
+
+    // Even with active task, repetitive output signals runaway
+    writeFileSync(join(taskDir, 'task_123_001.json'), JSON.stringify({
+      id: 'task_123_001', status: 'in_progress', assigned_to: 'alice',
+    }));
+    const { mkdirSync: mkd } = require('fs');
+    mkd(join(heartbeatDir, 'alice'), { recursive: true });
+    writeFileSync(join(heartbeatDir, 'alice', 'heartbeat.json'), JSON.stringify({
+      last_heartbeat: new Date().toISOString(),
+    }));
+
+    const cm = new ContextMonitor('alice', stateDir, logPath, 99999);
+    cm.setBurnContext({ taskDir, heartbeatDir });
+
+    const burn = cm.classifyBurn();
+    expect(burn.classification).toBe('runaway');
+    expect(burn.log_entropy_low).toBe(true);
+  });
+
+  it('returns unknown when no context dirs are configured', () => {
+    const cm = new ContextMonitor('alice', stateDir, logPath, 99999);
+    // No setBurnContext call
+    const burn = cm.classifyBurn();
+    expect(burn.classification).toBe('unknown');
+  });
+
+  it('check() passes burn analysis to callbacks', () => {
+    writeFileSync(join(taskDir, 'task_123_001.json'), JSON.stringify({
+      id: 'task_123_001', status: 'in_progress', assigned_to: 'alice',
+    }));
+    const { mkdirSync: mkd } = require('fs');
+    mkd(join(heartbeatDir, 'alice'), { recursive: true });
+    writeFileSync(join(heartbeatDir, 'alice', 'heartbeat.json'), JSON.stringify({
+      last_heartbeat: new Date().toISOString(),
+    }));
+
+    const cm = new ContextMonitor('alice', stateDir, logPath, 99999, {
+      max_session_tokens: 100, warn_pct: 40, alert_pct: 50, critical_pct: 60,
+    });
+    cm.setBurnContext({ taskDir, heartbeatDir });
+
+    let receivedBurn: any = null;
+    cm.setOnWarn((_est, burn) => { receivedBurn = burn; });
+
+    writeFileSync(logPath, 'x'.repeat(180), 'utf-8');
+    cm.check();
+
+    expect(receivedBurn).not.toBeNull();
+    expect(receivedBurn.classification).toBe('large_task');
+  });
+});
